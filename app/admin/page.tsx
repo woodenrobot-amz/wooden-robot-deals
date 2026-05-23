@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ManualDealForm } from "./manual-deal-form";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -32,6 +33,7 @@ export default async function AdminPage() {
             {user.email}
           </p>
         </div>
+		<ManualDealForm />
       </div>
     </main>
   );
