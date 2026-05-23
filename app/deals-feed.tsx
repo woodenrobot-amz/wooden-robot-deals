@@ -13,6 +13,7 @@ type Deal = {
   deal_score: number;
   badges: string[];
   amazon_url: string | null;
+  image_url: string | null;
   categories?: {
     name: string;
   } | null;
@@ -129,6 +130,16 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
             key={deal.id}
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-lg"
           >
+	{deal.image_url && (
+  	  <div className="mb-4 rounded-xl bg-white p-3">
+      		<img
+     			 src={deal.image_url}
+     			 alt={deal.title}
+      			className="mx-auto h-48 w-full object-contain"
+    		/>
+ 	 </div>
+	)}
+
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="mb-2 flex flex-wrap gap-2">
@@ -177,23 +188,39 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
               </div>
             </div>
 
-            <div className="mt-4 flex gap-3">
-              <a
-                href={deal.amazon_url || "#"}
-                target="_blank"
-                rel="noreferrer"
-                className="flex-1 rounded-xl bg-amber-400 px-4 py-3 text-center font-bold text-zinc-950"
-              >
-                View on Amazon
-              </a>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+  <a
+    href={deal.amazon_url || "#"}
+    target="_blank"
+    rel="noreferrer"
+    className="rounded-xl bg-amber-400 px-4 py-3 text-center text-sm font-bold text-zinc-950"
+  >
+    Amazon
+  </a>
 
-              <button
-                onClick={() => hideDeal(deal.id)}
-                className="rounded-xl bg-zinc-800 px-4 py-3 text-sm font-bold text-zinc-300"
-              >
-                Hide
-              </button>
-            </div>
+  <button
+    onClick={() => navigator.clipboard.writeText(deal.asin)}
+    className="rounded-xl bg-zinc-800 px-4 py-3 text-sm font-bold text-zinc-300"
+  >
+    Copy ASIN
+  </button>
+
+  <a
+    href={`https://keepa.com/#!product/1-${deal.asin}`}
+    target="_blank"
+    rel="noreferrer"
+    className="rounded-xl bg-zinc-800 px-4 py-3 text-center text-sm font-bold text-zinc-300"
+  >
+    Keepa
+  </a>
+
+  <button
+    onClick={() => hideDeal(deal.id)}
+    className="rounded-xl bg-zinc-800 px-4 py-3 text-sm font-bold text-zinc-300"
+  >
+    Hide
+  </button>
+</div>
           </article>
         ))}
       </div>
