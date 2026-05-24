@@ -14,6 +14,7 @@ type Deal = {
   badges: string[];
   amazon_url: string | null;
   image_url: string | null;
+  expires_at: string;
   categories?: {
     name: string;
   } | null;
