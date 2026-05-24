@@ -78,11 +78,16 @@ export function AsinQuickImport() {
       expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
     });
 
-    if (error) {
-      setMessage(error.message);
-      setSaving(false);
-      return;
-    }
+   if (error) {
+  if (error.code === "23505") {
+    setMessage("Deal already exists in the active feed.");
+  } else {
+    setMessage(error.message);
+  }
+
+  setSaving(false);
+  return;
+}
 
     setMessage("Deal saved.");
     setResult(null);
