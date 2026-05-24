@@ -3,6 +3,15 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+const categories = [
+  { id: "woodworking", name: "Woodworking" },
+  { id: "auto", name: "Auto" },
+  { id: "garage", name: "Garage" },
+  { id: "edc", name: "EDC" },
+  { id: "tech", name: "Tech" },
+  { id: "three_d_printing", name: "3D Printing" },
+];
+
 type EnrichedDeal = {
   asin: string;
   title: string;
@@ -24,6 +33,7 @@ export function AsinQuickImport() {
   const [result, setResult] = useState<EnrichedDeal | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [categoryId, setCategoryId] = useState("woodworking");
 
   async function handleFetch() {
     if (!asin.trim()) {
@@ -66,7 +76,7 @@ export function AsinQuickImport() {
       asin: result.asin,
       title: result.title,
       brand: result.brand,
-      category_id: result.category_id,
+      category_id: categoryId,
       image_url: result.image_url,
       amazon_url: result.amazon_url,
       current_price: result.current_price,
@@ -104,21 +114,33 @@ export function AsinQuickImport() {
       </p>
 
       <div className="mt-4 flex gap-3">
-        <input
-          value={asin}
-          onChange={(event) => setAsin(event.target.value)}
-          placeholder="Enter ASIN"
-          className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none"
-        />
+  <input
+    value={asin}
+    onChange={(event) => setAsin(event.target.value)}
+    placeholder="Enter ASIN"
+    className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none"
+  />
 
-        <button
-          onClick={handleFetch}
-          disabled={loading}
-          className="rounded-xl bg-amber-400 px-4 py-3 font-bold text-zinc-950 disabled:opacity-50"
-        >
-          {loading ? "Fetching..." : "Fetch"}
-        </button>
-      </div>
+  <button
+    onClick={handleFetch}
+    disabled={loading}
+    className="rounded-xl bg-amber-400 px-4 py-3 font-bold text-zinc-950 disabled:opacity-50"
+  >
+    {loading ? "Fetching..." : "Fetch"}
+  </button>
+</div>
+
+<select
+  value={categoryId}
+  onChange={(event) => setCategoryId(event.target.value)}
+  className="mt-3 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none"
+>
+  {categories.map((category) => (
+    <option key={category.id} value={category.id}>
+      {category.name}
+    </option>
+  ))}
+</select>
 
       {message && (
         <p className="mt-4 text-sm text-zinc-300">

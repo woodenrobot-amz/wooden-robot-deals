@@ -19,6 +19,25 @@ type Deal = {
   } | null;
 };
 
+function getExpirationText(expiresAt: string) {
+  const now = Date.now();
+  const expires = new Date(expiresAt).getTime();
+
+  const diffMs = expires - now;
+
+  if (diffMs <= 0) return "Expired";
+
+  const hours = Math.floor(diffMs / (1000 * 60 * 60));
+
+  if (hours < 24) {
+    return `Expires in ${hours}h`;
+  }
+
+  const days = Math.floor(hours / 24);
+
+  return `Expires in ${days}d`;
+}
+
 const HIDDEN_DEALS_KEY = "woodenRobot.hiddenDeals.v1";
 
 export function DealsFeed({ deals }: { deals: Deal[] }) {
@@ -69,7 +88,9 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
 
     return matchesCategory && matchesSearch;
   });
-
+  
+const publicBadges = ["Top Brand", "Huge Discount", "All Time Low"];
+  
   return (
     <>
       <div className="mb-4">
@@ -143,7 +164,10 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="mb-2 flex flex-wrap gap-2">
-                  {deal.badges?.map((badge) => (
+                  {deal.badges
+  ?.filter((badge) => publicBadges.includes(badge))
+  .slice(0, 3)
+  .map((badge) => (
                     <span
                       key={badge}
                       className="rounded-full bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-300"
@@ -166,11 +190,38 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
                 </p>
               </div>
 
-              <div className="shrink-0 rounded-xl bg-amber-400 px-3 py-2 text-center text-zinc-950">
-                <div className="text-xs font-semibold uppercase">Score</div>
-                <div className="text-2xl font-black">{deal.deal_score}</div>
-              </div>
-            </div>
+
+				
+<div className="mt-4 flex items-center justify-between gap-4">
+  <div className="pl-1 text-left">
+    <div className="text-[10px] uppercase tracking-wider text-zinc-600">
+      Expires
+    </div>
+
+    <div className="text-sm font-medium text-zinc-400">
+      {getExpirationText(deal.expires_at).replace("Expires in ", "")}
+    </div>
+  </div>
+
+  <div
+    className={`shrink-0 rounded-2xl px-5 py-3 text-center shadow-lg ${
+      deal.deal_score >= 90
+        ? "bg-green-400 text-zinc-950"
+        : deal.deal_score >= 75
+        ? "bg-amber-400 text-zinc-950"
+        : "bg-zinc-700 text-white"
+    }`}
+  >
+    <div className="text-[10px] font-bold uppercase tracking-widest opacity-70">
+      Deal
+    </div>
+
+    <div className="text-3xl font-black leading-none">
+      {deal.deal_score}
+    </div>
+  </div>
+</div></div>
+
 
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-xl bg-zinc-950 p-3">
@@ -181,37 +232,23 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
               </div>
 
               <div className="rounded-xl bg-zinc-950 p-3">
-                <div className="text-zinc-500">90 Day Avg</div>
+                <div className="text-zinc-500">90 Day Average</div>
                 <div className="text-xl font-bold text-zinc-300">
-                  ${deal.avg_90_price}
+                  {" "}
+  <span className="line-through">
+    ${deal.avg_90_price}
+  </span>
                 </div>
               </div>
             </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+<div className="mt-4 grid grid-cols-2 gap-3">
   <a
     href={deal.amazon_url || "#"}
     target="_blank"
     rel="noreferrer"
     className="rounded-xl bg-amber-400 px-4 py-3 text-center text-sm font-bold text-zinc-950"
   >
-    Amazon
-  </a>
-
-  <button
-    onClick={() => navigator.clipboard.writeText(deal.asin)}
-    className="rounded-xl bg-zinc-800 px-4 py-3 text-sm font-bold text-zinc-300"
-  >
-    Copy ASIN
-  </button>
-
-  <a
-    href={`https://keepa.com/#!product/1-${deal.asin}`}
-    target="_blank"
-    rel="noreferrer"
-    className="rounded-xl bg-zinc-800 px-4 py-3 text-center text-sm font-bold text-zinc-300"
-  >
-    Keepa
+    View Deal
   </a>
 
   <button
@@ -221,6 +258,7 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
     Hide
   </button>
 </div>
+
           </article>
         ))}
       </div>

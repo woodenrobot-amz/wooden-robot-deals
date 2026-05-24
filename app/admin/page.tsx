@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { ManualDealForm } from "./manual-deal-form";
 import { AsinQuickImport } from "./asin-quick-import";
+import { AdminDealList } from "./admin-deal-list";
+
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -9,6 +11,24 @@ export default async function AdminPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+const { data: deals } = await supabase
+  .from("deals")
+  .select(`
+    id,
+    asin,
+    title,
+    brand,
+    deal_score,
+    current_price,
+    avg_90_price,
+    image_url,
+    status
+  `)
+  .eq("status", "active")
+  .order("created_at", { ascending: false })
+  .limit(50);
+
 
   if (!user) {
     redirect("/login");
@@ -36,6 +56,7 @@ export default async function AdminPage() {
         </div>
 		<AsinQuickImport />
 		<ManualDealForm />
+		<AdminDealList initialDeals={deals || []} />
       </div>
     </main>
   );

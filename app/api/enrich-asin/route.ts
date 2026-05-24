@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { scoreDeal } from "@/lib/scoring";
+
 
 const KEEPA_DOMAIN_US = 1;
 
@@ -130,24 +132,35 @@ export async function POST(request: Request) {
   .map((image: string) => image.trim())
   .filter(Boolean);
 
-const imageName = imageNames[0] || "";
+  const imageName = imageNames[0] || "";
 
-const image_url = getImageUrl(product);
+  const image_url = getImageUrl(product); 
 
   const { currentPrice, avg90Price } = getBestPrice(product);
-  const dealScore = calculateDealScore(currentPrice, avg90Price);
+ 
+  const scoring = scoreDeal({
+  brand,
+  currentPrice,
+  avg90Price,
+  rating: product.rating ? product.rating / 10 : null,
+  reviewCount: product.reviewCount || null,
+  salesRank: product.salesRanks?.[0] || null,
+  hasImage: Boolean(image_url),
+  hasTitle: Boolean(title),
+});
 
-  return NextResponse.json({
-    asin,
-    title,
-    brand,
-    category_id: "woodworking",
-    image_url,
-    amazon_url: `https://amazon.com/dp/${asin}`,
-    current_price: currentPrice,
-    avg_90_price: avg90Price,
-    deal_score: dealScore,
-    badges: buildBadges(currentPrice, avg90Price, brand),
-	
-  });
+return NextResponse.json({
+  asin,
+  title,
+  brand,
+  category_id: "woodworking",
+  image_url,
+  amazon_url: `https://www.amazon.com/dp/${asin}?tag=${process.env.NEXT_PUBLIC_AMAZON_ASSOCIATE_TAG || ""}`,
+  current_price: currentPrice,
+  avg_90_price: avg90Price,
+  deal_score: scoring.totalScore,
+  badges: scoring.badges,
+  scoring_components: scoring.components,
+  brand_tier: scoring.brandTier,
+});
 }
