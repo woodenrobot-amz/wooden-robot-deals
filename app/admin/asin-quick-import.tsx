@@ -23,6 +23,15 @@ type EnrichedDeal = {
   avg_90_price: number;
   deal_score: number;
   badges: string[];
+  scoring_components: {
+    discountScore: number;
+    brandScore: number;
+    demandScore: number;
+    confidenceScore: number;
+    baseScore: number;
+    discountPercent: number;
+  };
+  brand_tier: number;
 };
 
 export function AsinQuickImport() {
@@ -82,22 +91,23 @@ export function AsinQuickImport() {
       current_price: result.current_price,
       avg_90_price: result.avg_90_price,
       deal_score: result.deal_score,
+      scoring_components: result.scoring_components,
       badges: result.badges,
       status: "active",
       source: "quick_import",
       expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
     });
 
-   if (error) {
-  if (error.code === "23505") {
-    setMessage("Deal already exists in the active feed.");
-  } else {
-    setMessage(error.message);
-  }
+    if (error) {
+      if (error.code === "23505") {
+        setMessage("Deal already exists in the active feed.");
+      } else {
+        setMessage(error.message);
+      }
 
-  setSaving(false);
-  return;
-}
+      setSaving(false);
+      return;
+    }
 
     setMessage("Deal saved.");
     setResult(null);
@@ -110,43 +120,40 @@ export function AsinQuickImport() {
       <h2 className="text-xl font-bold">ASIN Quick Import</h2>
 
       <p className="mt-2 text-sm text-zinc-400">
-        Fetch an ASIN, preview the enriched data, then save it as an active deal.
+        Fetch an ASIN, preview the enriched data, then save it as an active
+        deal.
       </p>
 
       <div className="mt-4 flex gap-3">
-  <input
-    value={asin}
-    onChange={(event) => setAsin(event.target.value)}
-    placeholder="Enter ASIN"
-    className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none"
-  />
+        <input
+          value={asin}
+          onChange={(event) => setAsin(event.target.value)}
+          placeholder="Enter ASIN"
+          className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none"
+        />
 
-  <button
-    onClick={handleFetch}
-    disabled={loading}
-    className="rounded-xl bg-amber-400 px-4 py-3 font-bold text-zinc-950 disabled:opacity-50"
-  >
-    {loading ? "Fetching..." : "Fetch"}
-  </button>
-</div>
+        <button
+          onClick={handleFetch}
+          disabled={loading}
+          className="rounded-xl bg-amber-400 px-4 py-3 font-bold text-zinc-950 disabled:opacity-50"
+        >
+          {loading ? "Fetching..." : "Fetch"}
+        </button>
+      </div>
 
-<select
-  value={categoryId}
-  onChange={(event) => setCategoryId(event.target.value)}
-  className="mt-3 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none"
->
-  {categories.map((category) => (
-    <option key={category.id} value={category.id}>
-      {category.name}
-    </option>
-  ))}
-</select>
+      <select
+        value={categoryId}
+        onChange={(event) => setCategoryId(event.target.value)}
+        className="mt-3 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none"
+      >
+        {categories.map((category) => (
+          <option key={category.id} value={category.id}>
+            {category.name}
+          </option>
+        ))}
+      </select>
 
-      {message && (
-        <p className="mt-4 text-sm text-zinc-300">
-          {message}
-        </p>
-      )}
+      {message && <p className="mt-4 text-sm text-zinc-300">{message}</p>}
 
       {result && (
         <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
@@ -171,9 +178,7 @@ export function AsinQuickImport() {
             ))}
           </div>
 
-          <h3 className="text-lg font-bold">
-            {result.title}
-          </h3>
+          <h3 className="text-lg font-bold">{result.title}</h3>
 
           <p className="mt-1 text-sm text-zinc-400">
             {result.brand} · {result.asin}
@@ -193,6 +198,63 @@ export function AsinQuickImport() {
             <div className="rounded-xl bg-zinc-900 p-3">
               <div className="text-zinc-500">Score</div>
               <div className="font-bold">{result.deal_score}</div>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm">
+            <div className="mb-3 font-bold text-zinc-200">Score Breakdown</div>
+
+            <div className="space-y-2 text-zinc-400">
+              <div className="flex justify-between">
+                <span>Base Score</span>
+                <span className="font-semibold text-zinc-100">
+                  +{result.scoring_components.baseScore}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Discount Percent</span>
+                <span className="font-semibold text-zinc-100">
+                  {result.scoring_components.discountPercent}%
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Discount Score</span>
+                <span className="font-semibold text-zinc-100">
+                  +{result.scoring_components.discountScore}
+                </span>
+              </div>
+
+              <div className="flex justify-between">
+                <span>Brand Score</span>
+                <span className="font-semibold text-zinc-100">
+                  +{result.scoring_components.brandScore}
+                </span>
+              </div>
+
+              <div className="flex justify-between">
+                <span>Demand Score</span>
+                <span className="font-semibold text-zinc-100">
+                  +{result.scoring_components.demandScore}
+                </span>
+              </div>
+
+              <div className="flex justify-between">
+                <span>Confidence Score</span>
+                <span className="font-semibold text-zinc-100">
+                  +{result.scoring_components.confidenceScore}
+                </span>
+              </div>
+
+              <div className="border-t border-zinc-800 pt-2">
+                <div className="flex justify-between text-zinc-200">
+                  <span>Total</span>
+                  <span className="font-bold">{result.deal_score}</span>
+                </div>
+              </div>
+
+              <div className="pt-2 text-xs text-zinc-500">
+                Brand Tier: {result.brand_tier}
+              </div>
             </div>
           </div>
 

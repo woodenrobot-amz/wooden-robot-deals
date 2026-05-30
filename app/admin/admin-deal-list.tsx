@@ -13,6 +13,15 @@ type AdminDeal = {
   avg_90_price: number | null;
   image_url: string | null;
   status: string;
+
+  scoring_components: {
+    baseScore: number;
+    brandScore: number;
+    demandScore: number;
+    discountScore: number;
+    confidenceScore: number;
+    discountPercent: number;
+  } | null;
 };
 
 export function AdminDealList({ initialDeals }: { initialDeals: AdminDeal[] }) {
@@ -32,7 +41,7 @@ export function AdminDealList({ initialDeals }: { initialDeals: AdminDeal[] }) {
     }
 
     setDeals((currentDeals) =>
-      currentDeals.filter((deal) => deal.id !== dealId)
+      currentDeals.filter((deal) => deal.id !== dealId),
     );
 
     setMessage("Deal killed.");
@@ -42,11 +51,7 @@ export function AdminDealList({ initialDeals }: { initialDeals: AdminDeal[] }) {
     <section className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
       <h2 className="text-xl font-bold">Active Deals</h2>
 
-      {message && (
-        <p className="mt-3 text-sm text-zinc-300">
-          {message}
-        </p>
-      )}
+      {message && <p className="mt-3 text-sm text-zinc-300">{message}</p>}
 
       <div className="mt-4 space-y-3">
         {deals.map((deal) => (
@@ -69,13 +74,9 @@ export function AdminDealList({ initialDeals }: { initialDeals: AdminDeal[] }) {
             )}
 
             <div className="min-w-0 flex-1">
-              <div className="text-xs text-zinc-500">
-                {deal.asin}
-              </div>
+              <div className="text-xs text-zinc-500">{deal.asin}</div>
 
-              <h3 className="line-clamp-2 font-semibold">
-                {deal.title}
-              </h3>
+              <h3 className="line-clamp-2 font-semibold">{deal.title}</h3>
 
               <p className="mt-1 text-sm text-zinc-400">
                 {deal.brand || "Unknown brand"}
@@ -85,7 +86,29 @@ export function AdminDealList({ initialDeals }: { initialDeals: AdminDeal[] }) {
                 <span>Score: {deal.deal_score}</span>
                 <span>Now: ${deal.current_price}</span>
                 <span>90d: ${deal.avg_90_price}</span>
+                <span>
+                  Discount: {deal.scoring_components.discountPercent}%{" "}
+                </span>
               </div>
+              {deal.scoring_components && (
+                <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-400">
+                  <div className="mb-2 font-semibold text-zinc-200">
+                    Score Breakdown
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <span>Base: +{deal.scoring_components.baseScore}</span>
+                    <span>
+                      Discount: +{deal.scoring_components.discountScore}
+                    </span>
+                    <span>Brand: +{deal.scoring_components.brandScore}</span>
+                    <span>Demand: +{deal.scoring_components.demandScore}</span>
+                    <span>
+                      Confidence: +{deal.scoring_components.confidenceScore}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <button
@@ -98,9 +121,7 @@ export function AdminDealList({ initialDeals }: { initialDeals: AdminDeal[] }) {
         ))}
 
         {deals.length === 0 && (
-          <p className="text-sm text-zinc-500">
-            No active deals.
-          </p>
+          <p className="text-sm text-zinc-500">No active deals.</p>
         )}
       </div>
     </section>

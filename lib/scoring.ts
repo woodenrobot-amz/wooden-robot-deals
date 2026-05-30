@@ -148,6 +148,7 @@ export function scoreDeal(input: ScoreInput) {
       demandScore,
       confidenceScore,
       baseScore: 25,
+      discountPercent: Math.round(discountPercent * 10) / 10,
     },
   };
 }
