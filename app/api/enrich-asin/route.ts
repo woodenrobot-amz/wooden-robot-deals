@@ -103,6 +103,11 @@ export async function POST(request: Request) {
   const asin = String(body.asin || "")
     .trim()
     .toUpperCase();
+
+  if (!asin) {
+    return NextResponse.json({ error: "ASIN is required." }, { status: 400 });
+  }
+
   const ignoredAsins = getIgnoredAsins();
 
   if (ignoredAsins.has(asin)) {
@@ -112,9 +117,6 @@ export async function POST(request: Request) {
       },
       { status: 409 },
     );
-  }
-  if (!asin) {
-    return NextResponse.json({ error: "ASIN is required." }, { status: 400 });
   }
 
   const keepaKey = process.env.KEEPA_API_KEY;
