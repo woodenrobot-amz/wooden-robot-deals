@@ -4,7 +4,6 @@ import { ManualDealForm } from "./manual-deal-form";
 import { AsinQuickImport } from "./asin-quick-import";
 import { AdminDealList } from "./admin-deal-list";
 
-
 export default async function AdminPage() {
   const supabase = await createClient();
 
@@ -12,9 +11,10 @@ export default async function AdminPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-const { data: deals } = await supabase
-  .from("deals")
-  .select(`
+  const { data: deals } = await supabase
+    .from("deals")
+    .select(
+      `
     id,
     asin,
     title,
@@ -23,12 +23,13 @@ const { data: deals } = await supabase
     current_price,
     avg_90_price,
     image_url,
-    status
-  `)
-  .eq("status", "active")
-  .order("created_at", { ascending: false })
-  .limit(50);
-
+    status,
+    scoring_components
+  `,
+    )
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(50);
 
   if (!user) {
     redirect("/login");
@@ -42,21 +43,15 @@ const { data: deals } = await supabase
             Admin
           </p>
 
-          <h1 className="mt-2 text-3xl font-bold">
-            Wooden Robot Admin
-          </h1>
+          <h1 className="mt-2 text-3xl font-bold">Wooden Robot Admin</h1>
 
-          <p className="mt-4 text-zinc-400">
-            Logged in as:
-          </p>
+          <p className="mt-4 text-zinc-400">Logged in as:</p>
 
-          <p className="mt-1 font-semibold">
-            {user.email}
-          </p>
+          <p className="mt-1 font-semibold">{user.email}</p>
         </div>
-		<AsinQuickImport />
-		<ManualDealForm />
-		<AdminDealList initialDeals={deals || []} />
+        <AsinQuickImport />
+        <ManualDealForm />
+        <AdminDealList initialDeals={deals || []} />
       </div>
     </main>
   );
