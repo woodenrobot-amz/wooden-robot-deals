@@ -40,6 +40,7 @@ const tier2Brands = [
   "klein",
   "stanley",
   "weber",
+  "workpro",
 ];
 
 function getBrandTier(brand: string) {
@@ -109,38 +110,33 @@ export function scoreDeal(input: ScoreInput) {
   if (avg90Price) confidenceScore += 2;
 
   const rawScore =
-    discountScore +
-    brandScore +
-    demandScore +
-    confidenceScore +
-    25;
+    discountScore + brandScore + demandScore + confidenceScore + 25;
 
   const totalScore = clampScore(rawScore);
 
   const badges: string[] = [];
 
-let discountPercent = 0;
+  let discountPercent = 0;
 
-if (currentPrice && avg90Price && currentPrice < avg90Price) {
-  discountPercent =
-    ((avg90Price - currentPrice) / avg90Price) * 100;
-}
+  if (currentPrice && avg90Price && currentPrice < avg90Price) {
+    discountPercent = ((avg90Price - currentPrice) / avg90Price) * 100;
+  }
 
-// Top Brand
-if (brandTier === 1) {
-  badges.push("Top Brand");
-}
+  // Top Brand
+  if (brandTier === 1) {
+    badges.push("Top Brand");
+  }
 
-// Huge Discount
-if (discountPercent >= 20) {
-  badges.push("Huge Discount");
-}
+  // Huge Discount
+  if (discountPercent >= 20) {
+    badges.push("Huge Discount");
+  }
 
-// All Time Low placeholder
-// Later we’ll use Keepa lowest-ever pricing data
-if (discountPercent >= 35) {
-  badges.push("All Time Low");
-}
+  // All Time Low placeholder
+  // Later we’ll use Keepa lowest-ever pricing data
+  if (discountPercent >= 35) {
+    badges.push("All Time Low");
+  }
 
   return {
     totalScore,
