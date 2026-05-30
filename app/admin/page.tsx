@@ -1,8 +1,29 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { ManualDealForm } from "./manual-deal-form";
-import { AsinQuickImport } from "./asin-quick-import";
-import { AdminDealList } from "./admin-deal-list";
+
+const adminLinks = [
+  {
+    href: "/admin/add-deal",
+    title: "Add Deal",
+    description: "Fetch an ASIN, preview scoring, and save a deal.",
+  },
+  {
+    href: "/admin/manage-deals",
+    title: "Manage Deals",
+    description: "Review active deals, scoring, and kill bad deals.",
+  },
+  {
+    href: "/admin/ignored-asins",
+    title: "Ignored ASINs",
+    description: "Manage ASINs that should never be enriched.",
+  },
+  {
+    href: "/admin/brand-tiers",
+    title: "Brand Tiers",
+    description: "Review and eventually manage brand scoring tiers.",
+  },
+];
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -10,26 +31,6 @@ export default async function AdminPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const { data: deals } = await supabase
-    .from("deals")
-    .select(
-      `
-    id,
-    asin,
-    title,
-    brand,
-    deal_score,
-    current_price,
-    avg_90_price,
-    image_url,
-    status,
-    scoring_components
-  `,
-    )
-    .eq("status", "active")
-    .order("created_at", { ascending: false })
-    .limit(50);
 
   if (!user) {
     redirect("/login");
@@ -46,12 +47,21 @@ export default async function AdminPage() {
           <h1 className="mt-2 text-3xl font-bold">Wooden Robot Admin</h1>
 
           <p className="mt-4 text-zinc-400">Logged in as:</p>
-
           <p className="mt-1 font-semibold">{user.email}</p>
         </div>
-        <AsinQuickImport />
-        <ManualDealForm />
-        <AdminDealList initialDeals={deals || []} />
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {adminLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 transition hover:border-amber-400/60 hover:bg-zinc-800"
+            >
+              <h2 className="text-xl font-bold">{link.title}</h2>
+              <p className="mt-2 text-sm text-zinc-400">{link.description}</p>
+            </Link>
+          ))}
+        </div>
       </div>
     </main>
   );
