@@ -1,16 +1,19 @@
-import fs from "fs";
-import path from "path";
+import { createClient } from "@/lib/supabase/server";
 
-const FILE_PATH = path.join(process.cwd(), "data", "ignored-asins.json");
+export async function getIgnoredAsins(): Promise<Set<string>> {
+  const supabase = await createClient();
 
-export function getIgnoredAsins(): Set<string> {
-  try {
-    const contents = fs.readFileSync(FILE_PATH, "utf8");
+  const { data, error } = await supabase.from("ignored_asins").select("asin");
 
-    const asins = JSON.parse(contents);
-
-    return new Set(asins.map((asin: string) => asin.trim().toUpperCase()));
-  } catch {
+  if (error || !data) {
     return new Set();
   }
+
+  return new Set(
+    data.map((row) =>
+      String(row.asin || "")
+        .trim()
+        .toUpperCase(),
+    ),
+  );
 }

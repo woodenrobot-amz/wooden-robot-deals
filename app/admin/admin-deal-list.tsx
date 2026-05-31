@@ -87,7 +87,11 @@ export function AdminDealList({ initialDeals }: { initialDeals: AdminDeal[] }) {
                 <span>Now: ${deal.current_price}</span>
                 <span>90d: ${deal.avg_90_price}</span>
                 <span>
-                  Discount: {deal.scoring_components.discountPercent}%{" "}
+                  {deal.scoring_components?.discountPercent != null && (
+                    <span>
+                      Discount: {deal.scoring_components.discountPercent}%
+                    </span>
+                  )}
                 </span>
               </div>
               {deal.scoring_components && (
