@@ -47,6 +47,39 @@ export function AdminDealList({ initialDeals }: { initialDeals: AdminDeal[] }) {
     setMessage("Deal killed.");
   }
 
+  async function ignoreDeal(deal: AdminDeal) {
+    const normalizedAsin = deal.asin.trim().toUpperCase();
+
+    const { error: ignoreError } = await supabase.from("ignored_asins").upsert({
+      asin: normalizedAsin,
+      title: deal.title,
+      brand: deal.brand,
+      image_url: deal.image_url,
+      reason: "Ignored from active deals",
+    });
+
+    if (ignoreError) {
+      setMessage(ignoreError.message);
+      return;
+    }
+
+    const { error: dealError } = await supabase
+      .from("deals")
+      .update({ status: "killed" })
+      .eq("id", deal.id);
+
+    if (dealError) {
+      setMessage(dealError.message);
+      return;
+    }
+
+    setDeals((currentDeals) =>
+      currentDeals.filter((currentDeal) => currentDeal.id !== deal.id),
+    );
+
+    setMessage(`ASIN ${normalizedAsin} ignored and deal killed.`);
+  }
+
   return (
     <section className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
       <h2 className="text-xl font-bold">Active Deals</h2>
@@ -114,13 +147,21 @@ export function AdminDealList({ initialDeals }: { initialDeals: AdminDeal[] }) {
                 </div>
               )}
             </div>
+            <div className="flex flex-col gap-2 self-center">
+              <button
+                onClick={() => killDeal(deal.id)}
+                className="self-center rounded-xl bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300"
+              >
+                Kill
+              </button>
 
-            <button
-              onClick={() => killDeal(deal.id)}
-              className="self-center rounded-xl bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300"
-            >
-              Kill
-            </button>
+              <button
+                onClick={() => ignoreDeal(deal)}
+                className="self-center rounded-xl bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-300"
+              >
+                Ignore
+              </button>
+            </div>
           </div>
         ))}
 
