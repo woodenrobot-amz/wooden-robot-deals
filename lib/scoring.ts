@@ -7,63 +7,19 @@ type ScoreInput = {
   salesRank?: number | null;
   hasImage?: boolean;
   hasTitle?: boolean;
+  brandTier?: string;
+  brandBonus?: number;
 };
-
-const tier1Brands = [
-  "dewalt",
-  "milwaukee",
-  "makita",
-  "bosch",
-  "festool",
-  "sawstop",
-  "woodpeckers",
-  "wera",
-  "wiha",
-  "knipex",
-  "leatherman",
-  "yeti",
-  "noctua",
-  "bambu lab",
-];
-
-const tier2Brands = [
-  "ryobi",
-  "ridgid",
-  "kreg",
-  "diablo",
-  "freud",
-  "anker",
-  "blackstone",
-  "traeger",
-  "elegoo",
-  "anycubic",
-  "klein",
-  "stanley",
-  "weber",
-  "workpro",
-];
-
-function getBrandTier(brand: string) {
-  const normalized = brand.toLowerCase();
-
-  if (tier1Brands.some((topBrand) => normalized.includes(topBrand))) {
-    return 1;
-  }
-
-  if (tier2Brands.some((midBrand) => normalized.includes(midBrand))) {
-    return 2;
-  }
-
-  return 3;
-}
 
 function clampScore(score: number) {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 export function scoreDeal(input: ScoreInput) {
+  const brandBonus = input.brandBonus || 0;
+  const brandTier = input.brandTier || "unrated";
+
   const {
-    brand,
     currentPrice,
     avg90Price,
     rating,
@@ -74,9 +30,10 @@ export function scoreDeal(input: ScoreInput) {
   } = input;
 
   let discountScore = 0;
+  let discountPercent = 0;
 
   if (currentPrice && avg90Price && currentPrice < avg90Price) {
-    const discountPercent = ((avg90Price - currentPrice) / avg90Price) * 100;
+    discountPercent = ((avg90Price - currentPrice) / avg90Price) * 100;
 
     if (discountPercent >= 40) discountScore = 35;
     else if (discountPercent >= 30) discountScore = 30;
@@ -85,9 +42,6 @@ export function scoreDeal(input: ScoreInput) {
     else if (discountPercent >= 10) discountScore = 12;
     else if (discountPercent >= 5) discountScore = 6;
   }
-
-  const brandTier = getBrandTier(brand);
-  const brandScore = brandTier === 1 ? 20 : brandTier === 2 ? 10 : 0;
 
   let demandScore = 0;
 
@@ -109,31 +63,24 @@ export function scoreDeal(input: ScoreInput) {
   if (currentPrice) confidenceScore += 2;
   if (avg90Price) confidenceScore += 2;
 
-  const rawScore =
-    discountScore + brandScore + demandScore + confidenceScore + 25;
+  const rawScore = discountScore + demandScore + confidenceScore + brandBonus;
 
   const totalScore = clampScore(rawScore);
 
   const badges: string[] = [];
 
-  let discountPercent = 0;
-
   if (currentPrice && avg90Price && currentPrice < avg90Price) {
     discountPercent = ((avg90Price - currentPrice) / avg90Price) * 100;
   }
 
-  // Top Brand
-  if (brandTier === 1) {
+  if (brandTier === "elite" || brandTier === "strong") {
     badges.push("Top Brand");
   }
 
-  // Huge Discount
   if (discountPercent >= 20) {
     badges.push("Huge Discount");
   }
 
-  // All Time Low placeholder
-  // Later we’ll use Keepa lowest-ever pricing data
   if (discountPercent >= 35) {
     badges.push("All Time Low");
   }
@@ -143,12 +90,11 @@ export function scoreDeal(input: ScoreInput) {
     badges,
     brandTier,
     components: {
+      discountPercent: Math.round(discountPercent * 10) / 10,
       discountScore,
-      brandScore,
+      brandScore: brandBonus,
       demandScore,
       confidenceScore,
-      baseScore: 25,
-      discountPercent: Math.round(discountPercent * 10) / 10,
     },
   };
 }

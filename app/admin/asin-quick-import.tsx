@@ -28,6 +28,7 @@ type EnrichedDeal = {
     brandScore: number;
     demandScore: number;
     confidenceScore: number;
+    brandBonus?: number;
     baseScore: number;
     discountPercent: number;
   };
@@ -54,25 +55,30 @@ export function AsinQuickImport() {
     setMessage("");
     setResult(null);
 
-    const response = await fetch("/api/enrich-asin", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ asin }),
-    });
+    try {
+      const response = await fetch("/api/enrich-asin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ asin }),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      setMessage(data.error || "Failed to fetch ASIN data.");
+      if (!response.ok) {
+        setMessage(data.error || "Failed to fetch ASIN data.");
+        return;
+      }
+
+      setResult(data);
+      setMessage("Fetched deal preview.");
+    } catch (error) {
+      console.error(error);
+      setMessage("Unexpected error while fetching ASIN data.");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setResult(data);
-    setMessage("Fetched deal preview.");
-    setLoading(false);
   }
 
   async function handleSaveDeal() {
@@ -206,12 +212,6 @@ export function AsinQuickImport() {
 
             <div className="space-y-2 text-zinc-400">
               <div className="flex justify-between">
-                <span>Base Score</span>
-                <span className="font-semibold text-zinc-100">
-                  +{result.scoring_components.baseScore}
-                </span>
-              </div>
-              <div className="flex justify-between">
                 <span>Discount Percent</span>
                 <span className="font-semibold text-zinc-100">
                   {result.scoring_components.discountPercent}%
@@ -227,7 +227,10 @@ export function AsinQuickImport() {
               <div className="flex justify-between">
                 <span>Brand Score</span>
                 <span className="font-semibold text-zinc-100">
-                  +{result.scoring_components.brandScore}
+                  +
+                  {result.scoring_components.brandScore ??
+                    result.scoring_components.brandBonus ??
+                    0}
                 </span>
               </div>
 

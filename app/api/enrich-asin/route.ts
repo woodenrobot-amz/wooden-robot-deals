@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { scoreDeal } from "@/lib/scoring";
 import { getIgnoredAsins } from "@/lib/ignored-asins";
+import { getBrandTierMap, normalizeBrandName } from "@/lib/brandTiers";
 
 const KEEPA_DOMAIN_US = 1;
 
@@ -99,6 +100,7 @@ function buildBadges(
 }
 
 export async function POST(request: Request) {
+  const brandTierMap = await getBrandTierMap();
   const body = await request.json();
   const asin = String(body.asin || "")
     .trim()
@@ -158,12 +160,9 @@ export async function POST(request: Request) {
   const brand = product.brand || "Unknown Brand";
   const title = product.title || `Amazon product ${asin}`;
 
-  const imageNames = String(product.imagesCSV || "")
-    .split(",")
-    .map((image: string) => image.trim())
-    .filter(Boolean);
-
-  const imageName = imageNames[0] || "";
+  const matchedBrand = brandTierMap.get(normalizeBrandName(brand));
+  const brandTier = matchedBrand?.tier || "unrated";
+  const brandBonus = matchedBrand?.score_bonus || 0;
 
   const image_url = getImageUrl(product);
 
@@ -171,6 +170,8 @@ export async function POST(request: Request) {
 
   const scoring = scoreDeal({
     brand,
+    brandTier,
+    brandBonus,
     currentPrice,
     avg90Price,
     rating: product.rating ? product.rating / 10 : null,
@@ -192,6 +193,7 @@ export async function POST(request: Request) {
     deal_score: scoring.totalScore,
     badges: scoring.badges,
     scoring_components: scoring.components,
-    brand_tier: scoring.brandTier,
+    brand_tier: brandTier,
+    brand_bonus: brandBonus,
   });
 }
