@@ -7,6 +7,7 @@ type Deal = {
   asin: string;
   title: string;
   brand: string | null;
+  brand_tier: string | null;
   category_id: string | null;
   current_price: number | null;
   avg_90_price: number | null;
@@ -60,7 +61,7 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
     setHiddenDealIds(nextHiddenDealIds);
     window.localStorage.setItem(
       HIDDEN_DEALS_KEY,
-      JSON.stringify(nextHiddenDealIds)
+      JSON.stringify(nextHiddenDealIds),
     );
   }
 
@@ -74,8 +75,8 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
       deals.map((deal) => [
         deal.category_id || "uncategorized",
         deal.categories?.name || deal.category_id || "Uncategorized",
-      ])
-    )
+      ]),
+    ),
   );
 
   const filteredDeals = deals.filter((deal) => {
@@ -84,14 +85,15 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
     const matchesCategory =
       selectedCategory === "all" || deal.category_id === selectedCategory;
 
-    const searchText = `${deal.title} ${deal.brand || ""} ${deal.asin}`.toLowerCase();
+    const searchText =
+      `${deal.title} ${deal.brand || ""} ${deal.asin}`.toLowerCase();
     const matchesSearch = searchText.includes(search.toLowerCase());
 
     return matchesCategory && matchesSearch;
   });
-  
-const publicBadges = ["Top Brand", "Huge Discount", "All Time Low"];
-  
+
+  const publicBadges = ["Top Brand", "Huge Discount", "All Time Low"];
+
   return (
     <>
       <div className="mb-4">
@@ -152,30 +154,30 @@ const publicBadges = ["Top Brand", "Huge Discount", "All Time Low"];
             key={deal.id}
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-lg"
           >
-	{deal.image_url && (
-  	  <div className="mb-4 rounded-xl bg-white p-3">
-      		<img
-     			 src={deal.image_url}
-     			 alt={deal.title}
-      			className="mx-auto h-48 w-full object-contain"
-    		/>
- 	 </div>
-	)}
+            {deal.image_url && (
+              <div className="mb-4 rounded-xl bg-white p-3">
+                <img
+                  src={deal.image_url}
+                  alt={deal.title}
+                  className="mx-auto h-48 w-full object-contain"
+                />
+              </div>
+            )}
 
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="mb-2 flex flex-wrap gap-2">
                   {deal.badges
-  ?.filter((badge) => publicBadges.includes(badge))
-  .slice(0, 3)
-  .map((badge) => (
-                    <span
-                      key={badge}
-                      className="rounded-full bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-300"
-                    >
-                      {badge}
-                    </span>
-                  ))}
+                    ?.filter((badge) => publicBadges.includes(badge))
+                    .slice(0, 3)
+                    .map((badge) => (
+                      <span
+                        key={badge}
+                        className="rounded-full bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-300"
+                      >
+                        {badge}
+                      </span>
+                    ))}
                 </div>
 
                 <h2 className="text-lg font-semibold leading-snug">
@@ -191,38 +193,39 @@ const publicBadges = ["Top Brand", "Huge Discount", "All Time Low"];
                 </p>
               </div>
 
+              <div className="mt-4 flex items-center justify-between gap-4">
+                <div className="pl-1 text-left">
+                  <div className="text-[10px] uppercase tracking-wider text-zinc-600">
+                    Expires
+                  </div>
 
-				
-<div className="mt-4 flex items-center justify-between gap-4">
-  <div className="pl-1 text-left">
-    <div className="text-[10px] uppercase tracking-wider text-zinc-600">
-      Expires
-    </div>
+                  <div className="text-sm font-medium text-zinc-400">
+                    {getExpirationText(deal.expires_at).replace(
+                      "Expires in ",
+                      "",
+                    )}
+                  </div>
+                </div>
 
-    <div className="text-sm font-medium text-zinc-400">
-      {getExpirationText(deal.expires_at).replace("Expires in ", "")}
-    </div>
-  </div>
+                <div
+                  className={`shrink-0 rounded-2xl px-5 py-3 text-center shadow-lg ${
+                    deal.deal_score >= 90
+                      ? "bg-green-400 text-zinc-950"
+                      : deal.deal_score >= 75
+                        ? "bg-amber-400 text-zinc-950"
+                        : "bg-zinc-700 text-white"
+                  }`}
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-widest opacity-70">
+                    Deal
+                  </div>
 
-  <div
-    className={`shrink-0 rounded-2xl px-5 py-3 text-center shadow-lg ${
-      deal.deal_score >= 90
-        ? "bg-green-400 text-zinc-950"
-        : deal.deal_score >= 75
-        ? "bg-amber-400 text-zinc-950"
-        : "bg-zinc-700 text-white"
-    }`}
-  >
-    <div className="text-[10px] font-bold uppercase tracking-widest opacity-70">
-      Deal
-    </div>
-
-    <div className="text-3xl font-black leading-none">
-      {deal.deal_score}
-    </div>
-  </div>
-</div></div>
-
+                  <div className="text-3xl font-black leading-none">
+                    {deal.deal_score}
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-xl bg-zinc-950 p-3">
@@ -236,30 +239,27 @@ const publicBadges = ["Top Brand", "Huge Discount", "All Time Low"];
                 <div className="text-zinc-500">90 Day Average</div>
                 <div className="text-xl font-bold text-zinc-300">
                   {" "}
-  <span className="line-through">
-    ${deal.avg_90_price}
-  </span>
+                  <span className="line-through">${deal.avg_90_price}</span>
                 </div>
               </div>
             </div>
-<div className="mt-4 grid grid-cols-2 gap-3">
-  <a
-    href={deal.amazon_url || "#"}
-    target="_blank"
-    rel="noreferrer"
-    className="rounded-xl bg-amber-400 px-4 py-3 text-center text-sm font-bold text-zinc-950"
-  >
-    View Deal
-  </a>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <a
+                href={deal.amazon_url || "#"}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-xl bg-amber-400 px-4 py-3 text-center text-sm font-bold text-zinc-950"
+              >
+                View Deal
+              </a>
 
-  <button
-    onClick={() => hideDeal(deal.id)}
-    className="rounded-xl bg-zinc-800 px-4 py-3 text-sm font-bold text-zinc-300"
-  >
-    Hide
-  </button>
-</div>
-
+              <button
+                onClick={() => hideDeal(deal.id)}
+                className="rounded-xl bg-zinc-800 px-4 py-3 text-sm font-bold text-zinc-300"
+              >
+                Hide
+              </button>
+            </div>
           </article>
         ))}
       </div>
