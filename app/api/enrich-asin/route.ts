@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { scoreDeal } from "@/lib/scoring";
 import { getIgnoredAsins } from "@/lib/ignored-asins";
 import { getBrandTierMap, normalizeBrandName } from "@/lib/brandTiers";
+import { getPaapiProductByAsin } from "@/lib/paapi";
 
 const KEEPA_DOMAIN_US = 1;
 
@@ -156,17 +157,24 @@ export async function POST(request: Request) {
       { status: 404 },
     );
   }
+  const paapiProduct = await getPaapiProductByAsin(asin);
 
   const brand = product.brand || "Unknown Brand";
-  const title = product.title || `Amazon product ${asin}`;
+
+  const title =
+    paapiProduct?.title || product.title || `Amazon product ${asin}`;
 
   const matchedBrand = brandTierMap.get(normalizeBrandName(brand));
   const brandTier = matchedBrand?.tier || "unrated";
   const brandBonus = matchedBrand?.score_bonus || 0;
 
-  const image_url = getImageUrl(product);
+  const image_url = paapiProduct?.imageUrl || getImageUrl(product);
 
-  const { currentPrice, avg90Price } = getBestPrice(product);
+  const keepaPrices = getBestPrice(product);
+
+  const currentPrice = paapiProduct?.currentPrice || keepaPrices.currentPrice;
+
+  const avg90Price = keepaPrices.avg90Price;
 
   const scoring = scoreDeal({
     brand,
@@ -187,7 +195,9 @@ export async function POST(request: Request) {
     brand,
     category_id: "woodworking",
     image_url,
-    amazon_url: `https://www.amazon.com/dp/${asin}?tag=${process.env.NEXT_PUBLIC_AMAZON_ASSOCIATE_TAG || ""}`,
+    amazon_url:
+      paapiProduct?.detailPageUrl ||
+      `https://www.amazon.com/dp/${asin}?tag=${process.env.NEXT_PUBLIC_AMAZON_ASSOCIATE_TAG || ""}`,
     current_price: currentPrice,
     avg_90_price: avg90Price,
     deal_score: scoring.totalScore,
