@@ -32,7 +32,14 @@ export default async function Home() {
         <DealsFeed deals={deals || []} />
       </div>
       <footer className="mx-auto max-w-3xl px-4 pb-6 text-xs text-zinc-500">
-        As an Amazon Associate, Wooden Robot may earn from qualifying purchases.
+        <p>
+          As an Amazon Associate, Wooden Robot earns from qualifying purchases.
+        </p>
+        <p className="mt-2">
+          Prices and availability are subject to change. Any price and
+          availability information displayed on Amazon at the time of purchase
+          will apply to the purchase of this product.
+        </p>
       </footer>
     </main>
   );

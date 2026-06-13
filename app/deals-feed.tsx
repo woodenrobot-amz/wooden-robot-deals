@@ -10,7 +10,6 @@ type Deal = {
   brand_tier: string | null;
   category_id: string | null;
   current_price: number | null;
-  avg_90_price: number | null;
   deal_score: number;
   badges: string[];
   amazon_url: string | null;
@@ -227,20 +226,16 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-xl bg-zinc-950 p-3">
-                <div className="text-zinc-500">Current Price</div>
-                <div className="text-xl font-bold text-white">
-                  ${deal.current_price}
-                </div>
+            <div className="mt-4 rounded-xl bg-zinc-950 p-3 text-sm">
+              <div className="text-zinc-500">Current Price</div>
+              <div className="text-xl font-bold text-white">
+                {deal.current_price != null
+                  ? `$${deal.current_price}`
+                  : "Check Amazon"}
               </div>
-
-              <div className="rounded-xl bg-zinc-950 p-3">
-                <div className="text-zinc-500">90 Day Average</div>
-                <div className="text-xl font-bold text-zinc-300">
-                  {" "}
-                  <span className="line-through">${deal.avg_90_price}</span>
-                </div>
+              <div className="mt-1 text-xs text-zinc-500">
+                Price and availability may change. Final price is shown on
+                Amazon.
               </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3">
