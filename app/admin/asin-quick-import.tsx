@@ -64,10 +64,22 @@ export function AsinQuickImport() {
         body: JSON.stringify({ asin }),
       });
 
-      const data = await response.json();
+      const text = await response.text();
+
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setMessage(
+          text
+            ? `API returned non-JSON response: ${text.slice(0, 300)}`
+            : `API returned ${response.status} with no response body.`,
+        );
+        return;
+      }
 
       if (!response.ok) {
-        setMessage(data.error || "Failed to fetch ASIN data.");
+        setMessage(data.error || `API returned ${response.status}`);
         return;
       }
 
