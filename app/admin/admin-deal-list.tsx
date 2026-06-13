@@ -28,6 +28,45 @@ export function AdminDealList({ initialDeals }: { initialDeals: AdminDeal[] }) {
   const supabase = createClient();
   const [deals, setDeals] = useState(initialDeals);
   const [message, setMessage] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function refreshDeals() {
+    setRefreshing(true);
+    setMessage("");
+
+    const response = await fetch("/api/admin/refresh-deals", {
+      method: "POST",
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setMessage(data.error || "Failed to refresh deals.");
+      setRefreshing(false);
+      return;
+    }
+
+    setDeals((currentDeals) =>
+      currentDeals.map((deal) => {
+        const refreshedDeal = data.deals.find(
+          (item: { id: string }) => item.id === deal.id,
+        );
+
+        if (!refreshedDeal) return deal;
+
+        return {
+          ...deal,
+          current_price: refreshedDeal.current_price,
+          deal_score: refreshedDeal.deal_score,
+          scoring_components: refreshedDeal.scoring_components,
+        };
+      }),
+    );
+
+    setMessage(`Refreshed ${data.refreshed} deal(s). Skipped ${data.skipped}.`);
+
+    setRefreshing(false);
+  }
 
   async function killDeal(dealId: string) {
     const { error } = await supabase
@@ -83,6 +122,14 @@ export function AdminDealList({ initialDeals }: { initialDeals: AdminDeal[] }) {
   return (
     <section className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
       <h2 className="text-xl font-bold">Active Deals</h2>
+
+      <button
+        onClick={refreshDeals}
+        disabled={refreshing}
+        className="mt-3 rounded-xl bg-amber-400 px-4 py-2 text-sm font-bold text-zinc-950 disabled:opacity-50"
+      >
+        {refreshing ? "Refreshing..." : "Refresh Prices"}
+      </button>
 
       {message && <p className="mt-3 text-sm text-zinc-300">{message}</p>}
 
