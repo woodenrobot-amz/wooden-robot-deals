@@ -157,7 +157,13 @@ export async function POST(request: Request) {
       { status: 404 },
     );
   }
-  const paapiProduct = await getPaapiProductByAsin(asin);
+  let paapiProduct = null;
+
+  try {
+    paapiProduct = await getPaapiProductByAsin(asin);
+  } catch (error) {
+    console.error("PA-API lookup failed, falling back to Keepa:", error);
+  }
 
   const brand = product.brand || "Unknown Brand";
 
