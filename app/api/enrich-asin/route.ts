@@ -3,107 +3,16 @@ import { scoreDeal } from "@/lib/scoring";
 import { getIgnoredAsins } from "@/lib/ignored-asins";
 import { getBrandTierMap, normalizeBrandName } from "@/lib/brandTiers";
 import { getPaapiProductByAsin } from "@/lib/paapi";
-
-const KEEPA_DOMAIN_US = 1;
-
-function keepaCentsToDollars(value: unknown) {
-  const cents = Number(value);
-
-  if (!Number.isFinite(cents) || cents <= 0) return null;
-
-  return Math.round((cents / 100) * 100) / 100;
-}
-
-function getImageUrl(product: any) {
-  if (product.imagesCSV) {
-    return `https://images-na.ssl-images-amazon.com/images/I/${
-      String(product.imagesCSV).split(",")[0]
-    }`;
-  }
-
-  if (Array.isArray(product.images) && product.images.length) {
-    const first = product.images[0];
-
-    if (first.l) {
-      return `https://images-na.ssl-images-amazon.com/images/I/${first.l}`;
-    }
-
-    if (first.m) {
-      return `https://images-na.ssl-images-amazon.com/images/I/${first.m}`;
-    }
-  }
-
-  return "";
-}
-
-function getBestPrice(product: any) {
-  const current = product?.stats?.current || [];
-  const avg90 = product?.stats?.avg90 || [];
-
-  // Keepa price indexes vary by metric. These are useful fallbacks:
-  // 18 = Buy Box, 1 = New, 0 = Amazon
-  const currentCandidates = [current[18], current[1], current[0]];
-  const avg90Candidates = [avg90[18], avg90[1], avg90[0]];
-
-  const currentPrice =
-    currentCandidates.map(keepaCentsToDollars).find(Boolean) || null;
-
-  const avg90Price =
-    avg90Candidates.map(keepaCentsToDollars).find(Boolean) || null;
-
-  return { currentPrice, avg90Price };
-}
-
-function calculateDealScore(
-  currentPrice: number | null,
-  avg90Price: number | null,
-) {
-  if (!currentPrice || !avg90Price || currentPrice >= avg90Price) return 50;
-
-  const discountPercent = ((avg90Price - currentPrice) / avg90Price) * 100;
-
-  return Math.min(100, Math.round(50 + discountPercent));
-}
-
-function buildBadges(
-  currentPrice: number | null,
-  avg90Price: number | null,
-  brand: string,
-) {
-  const badges: string[] = [];
-
-  const topBrands = [
-    "DeWalt",
-    "Milwaukee",
-    "Makita",
-    "Bosch",
-    "Festool",
-    "SawStop",
-  ];
-
-  if (
-    topBrands.some((topBrand) =>
-      brand.toLowerCase().includes(topBrand.toLowerCase()),
-    )
-  ) {
-    badges.push("Top Brand");
-  }
-
-  if (currentPrice && avg90Price) {
-    const discountPercent = ((avg90Price - currentPrice) / avg90Price) * 100;
-
-    if (discountPercent >= 25) badges.push("Huge Discount");
-  }
-
-  badges.push("Keepa");
-
-  return badges;
-}
+import {
+  getKeepaBestPrice,
+  getKeepaImageUrl,
+  getKeepaProductByAsin,
+} from "@/lib/keepa/product";
 
 export async function POST(request: Request) {
   try {
-    const brandTierMap = await getBrandTierMap();
     const body = await request.json();
+
     const asin = String(body.asin || "")
       .trim()
       .toUpperCase();
@@ -116,48 +25,13 @@ export async function POST(request: Request) {
 
     if (ignoredAsins.has(asin)) {
       return NextResponse.json(
-        {
-          error: `ASIN ${asin} is on the ignored list.`,
-        },
+        { error: `ASIN ${asin} is on the ignored list.` },
         { status: 409 },
       );
     }
 
-    const keepaKey = process.env.KEEPA_API_KEY;
+    const product = await getKeepaProductByAsin(asin);
 
-    if (!keepaKey) {
-      return NextResponse.json(
-        { error: "Missing KEEPA_API_KEY environment variable." },
-        { status: 500 },
-      );
-    }
-
-    const keepaUrl = new URL("https://api.keepa.com/product");
-    keepaUrl.searchParams.set("key", keepaKey);
-    keepaUrl.searchParams.set("domain", String(KEEPA_DOMAIN_US));
-    keepaUrl.searchParams.set("asin", asin);
-    keepaUrl.searchParams.set("stats", "90");
-
-    const response = await fetch(keepaUrl.toString(), {
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: `Keepa request failed: ${response.status}` },
-        { status: 500 },
-      );
-    }
-
-    const data = await response.json();
-    const product = data.products?.[0];
-
-    if (!product) {
-      return NextResponse.json(
-        { error: "No Keepa product found for that ASIN." },
-        { status: 404 },
-      );
-    }
     let paapiProduct = null;
 
     try {
@@ -167,21 +41,19 @@ export async function POST(request: Request) {
     }
 
     const brand = product.brand || "Unknown Brand";
-
     const title =
       paapiProduct?.title || product.title || `Amazon product ${asin}`;
 
+    const image_url = paapiProduct?.imageUrl || getKeepaImageUrl(product);
+
+    const keepaPrices = getKeepaBestPrice(product);
+    const currentPrice = paapiProduct?.currentPrice || keepaPrices.currentPrice;
+    const avg90Price = keepaPrices.avg90Price;
+
+    const brandTierMap = await getBrandTierMap();
     const matchedBrand = brandTierMap.get(normalizeBrandName(brand));
     const brandTier = matchedBrand?.tier || "unrated";
     const brandBonus = matchedBrand?.score_bonus || 0;
-
-    const image_url = paapiProduct?.imageUrl || getImageUrl(product);
-
-    const keepaPrices = getBestPrice(product);
-
-    const currentPrice = paapiProduct?.currentPrice || keepaPrices.currentPrice;
-
-    const avg90Price = keepaPrices.avg90Price;
 
     const scoring = scoreDeal({
       brand,
@@ -204,7 +76,10 @@ export async function POST(request: Request) {
       image_url,
       amazon_url:
         paapiProduct?.detailPageUrl ||
-        `https://www.amazon.com/dp/${asin}?tag=${process.env.NEXT_PUBLIC_AMAZON_ASSOCIATE_TAG || ""}`,
+        `https://www.amazon.com/dp/${asin}?tag=${
+          process.env.NEXT_PUBLIC_AMAZON_ASSOCIATE_TAG || ""
+        }`,
+      keepa_url: `https://keepa.com/#!product/1-${asin}`,
       current_price: currentPrice,
       avg_90_price: avg90Price,
       deal_score: scoring.totalScore,
