@@ -49,7 +49,7 @@ export async function runStream(streamName: string) {
     stream: stream.id,
     category: stream.category_id,
     found: discoveryResults.asinList.length,
-    inserted: candidateRows.length,
+    processed: candidateRows.length,
     asins: discoveryResults.asinList,
     totalResults: discoveryResults.totalResults,
     tokensLeft: discoveryResults.tokensLeft,
