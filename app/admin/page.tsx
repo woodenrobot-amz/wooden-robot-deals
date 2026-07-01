@@ -23,6 +23,11 @@ const adminLinks = [
     title: "Brand Tiers",
     description: "Review and eventually manage brand scoring tiers.",
   },
+  {
+    href: "/admin/run-stream",
+    title: "Run Stream",
+    description: "Execute a discovery stream and process the results.",
+  },
 ];
 
 export default async function AdminPage() {
