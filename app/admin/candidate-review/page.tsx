@@ -15,11 +15,11 @@ export default async function CandidateReviewPage() {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("deal_candidates")
-    .select("asin, stream_id, category_id, raw_data")
-    .eq("status", "enriched")
+    .select("asin, stream_id, category_id, status, raw_data")
+    .in("status", ["enriched", "published"])
     .limit(200);
 
-  if (error) throw new Error(`Failed to load enriched candidates: ${error.message}`);
+  if (error) throw new Error(`Failed to load review candidates: ${error.message}`);
 
   return (
     <main className="min-h-screen bg-zinc-950 px-4 py-8 text-white">
