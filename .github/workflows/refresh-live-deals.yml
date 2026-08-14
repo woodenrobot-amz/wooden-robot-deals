@@ -1,0 +1,46 @@
+name: Refresh Live Deals
+
+on:
+  schedule:
+    # Keep Amazon Product Advertising Content comfortably inside its 24h refresh window.
+    - cron: "20 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-live-deals
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Refresh live Amazon deals
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$APP_URL" || -z "$AUTOMATION_SECRET" ]]; then
+            echo "::error::Add APP_URL and AUTOMATION_SECRET as repository Actions secrets."
+            exit 1
+          fi
+
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 2 \
+            --retry-all-errors \
+            --connect-timeout 15 \
+            --max-time 180 \
+            --request POST \
+            --header "Authorization: Bearer $AUTOMATION_SECRET" \
+            "${APP_URL%/}/api/automation/refresh-live-deals"
+
+          echo
+          echo "Live deal refresh completed."
