@@ -26,8 +26,6 @@ export function PwaControls({ version }: { version: string }) {
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
-    setOffline(!navigator.onLine);
-
     const dismissedAt = Number(
       window.localStorage.getItem(INSTALL_DISMISSED_KEY) || 0,
     );
@@ -36,9 +34,12 @@ export function PwaControls({ version }: { version: string }) {
       INSTALL_DISMISS_DAYS * 24 * 60 * 60 * 1000;
     const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
 
-    if (ios && !isStandalone() && canPrompt) {
-      setShowIosInstall(true);
-    }
+    queueMicrotask(() => {
+      setOffline(!navigator.onLine);
+      if (ios && !isStandalone() && canPrompt) {
+        setShowIosInstall(true);
+      }
+    });
 
     const handleInstallPrompt = (event: Event) => {
       event.preventDefault();
