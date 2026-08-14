@@ -75,7 +75,12 @@ type AmazonApiItem = {
     title?: { displayValue?: string };
     byLineInfo?: { brand?: { displayValue?: string } };
   };
-  images?: { primary?: { medium?: { url?: string } } };
+  images?: {
+    primary?: {
+      large?: { url?: string };
+      medium?: { url?: string };
+    };
+  };
   offersV2?: {
     listings?: Array<{
       price?: { money?: { amount?: number; displayAmount?: string } };
@@ -116,6 +121,7 @@ export async function getAmazonItems(
     marketplace: "www.amazon.com",
     partnerTag,
     resources: [
+      "images.primary.large",
       "images.primary.medium",
       "itemInfo.title",
       "itemInfo.byLineInfo",
@@ -163,7 +169,10 @@ export async function getAmazonItems(
       parentAsin: item?.parentASIN ?? null,
       title: item?.itemInfo?.title?.displayValue ?? null,
       brand: item?.itemInfo?.byLineInfo?.brand?.displayValue ?? null,
-      imageUrl: item?.images?.primary?.medium?.url ?? null,
+      imageUrl:
+        item?.images?.primary?.large?.url ??
+        item?.images?.primary?.medium?.url ??
+        null,
       currentPrice:
         typeof priceMoney?.amount === "number" ? priceMoney.amount : null,
       displayPrice: priceMoney?.displayAmount ?? null,
