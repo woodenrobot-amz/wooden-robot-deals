@@ -1,8 +1,8 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { runKeepaDiscovery } from "@/lib/keepa/discovery";
 
 export async function runStream(streamName: string) {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: stream, error } = await supabase
     .from("discovery_streams")
@@ -11,7 +11,9 @@ export async function runStream(streamName: string) {
     .single();
 
   if (error || !stream) {
-    throw new Error(`Stream not found: ${streamName}`);
+    throw new Error(
+      `Stream not found: ${streamName}${error ? ` (${error.message})` : ""}`,
+    );
   }
 
   if (!stream.is_active) {
