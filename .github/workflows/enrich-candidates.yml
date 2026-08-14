@@ -1,0 +1,72 @@
+name: Enrich Deal Candidates
+
+on:
+  schedule:
+    # Process up to 50 candidates per hour, after discovery jobs.
+    - cron: "35 * * * *"
+  workflow_dispatch:
+    inputs:
+      batch_size:
+        description: Candidates to enrich
+        required: true
+        default: "50"
+        type: choice
+        options:
+          - "10"
+          - "25"
+          - "50"
+          - "100"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: enrich-deal-candidates
+  cancel-in-progress: false
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Enrich candidate batch
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
+          MANUAL_BATCH_SIZE: ${{ inputs.batch_size }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$APP_URL" || -z "$AUTOMATION_SECRET" ]]; then
+            echo "::error::Add APP_URL and AUTOMATION_SECRET as repository Actions secrets."
+            exit 1
+          fi
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            batch_size="$MANUAL_BATCH_SIZE"
+          else
+            batch_size="50"
+          fi
+
+          payload="$(printf '{"limit":%s}' "$batch_size")"
+
+          curl_args=(
+            --fail-with-body
+            --silent
+            --show-error
+            --retry 2
+            --retry-all-errors
+            --connect-timeout 15
+            --max-time 180
+            --request POST
+            --header "Authorization: Bearer $AUTOMATION_SECRET"
+            --header "Content-Type: application/json"
+            --data "$payload"
+          )
+
+          curl "${curl_args[@]}" "${APP_URL%/}/api/automation/enrich-candidates"
+
+          echo
+          echo "Candidate enrichment completed."
