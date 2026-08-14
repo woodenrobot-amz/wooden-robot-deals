@@ -182,13 +182,19 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
             className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 shadow-lg"
           >
             {deal.image_url && (
-              <div className="mb-4 rounded-xl bg-white p-3">
+              <a
+                href={deal.amazon_url || "#"}
+                target="_blank"
+                rel="sponsored nofollow noreferrer"
+                aria-label={`View ${deal.title} on Amazon`}
+                className="mx-auto mb-4 block aspect-square w-full max-w-72 overflow-hidden rounded-xl bg-white p-4 ring-1 ring-white/10 transition hover:ring-2 hover:ring-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              >
                 <img
                   src={deal.image_url}
                   alt={deal.title}
-                  className="mx-auto h-48 w-full object-contain"
+                  className="h-full w-full object-contain"
                 />
-              </div>
+              </a>
             )}
 
             <div className="flex items-start justify-between gap-4">
@@ -275,7 +281,7 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
               <a
                 href={deal.amazon_url || "#"}
                 target="_blank"
-                rel="noreferrer"
+                rel="sponsored nofollow noreferrer"
                 className="rounded-xl bg-amber-400 px-4 py-3 text-center text-sm font-bold text-zinc-950"
               >
                 View Deal
