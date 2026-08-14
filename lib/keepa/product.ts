@@ -1,3 +1,24 @@
+export type KeepaProduct = {
+  asin?: string;
+  brand?: string;
+  title?: string;
+  imagesCSV?: string;
+  images?: Array<{ l?: string; m?: string }>;
+  stats?: {
+    current?: unknown[];
+    avg90?: unknown[];
+  };
+  rating?: number;
+  reviewCount?: number;
+  parentAsin?: string;
+};
+
+type KeepaProductResponse = {
+  products?: KeepaProduct[];
+  tokensLeft?: number;
+  tokensConsumed?: number;
+};
+
 const KEEPA_DOMAIN_US = 1;
 const KEEPA_PRODUCT_BATCH_LIMIT = 100;
 
@@ -9,7 +30,7 @@ export function keepaCentsToDollars(value: unknown) {
   return Math.round((cents / 100) * 100) / 100;
 }
 
-export function getKeepaImageUrl(product: any) {
+export function getKeepaImageUrl(product: KeepaProduct) {
   if (product.imagesCSV) {
     return `https://images-na.ssl-images-amazon.com/images/I/${
       String(product.imagesCSV).split(",")[0]
@@ -31,7 +52,7 @@ export function getKeepaImageUrl(product: any) {
   return "";
 }
 
-export function getKeepaBestPrice(product: any) {
+export function getKeepaBestPrice(product: KeepaProduct) {
   const current = product?.stats?.current || [];
   const avg90 = product?.stats?.avg90 || [];
 
@@ -90,7 +111,9 @@ export async function getKeepaProductsByAsins(asins: string[]) {
     cache: "no-store",
   });
 
-  const data = await response.json().catch(() => null);
+  const data = (await response.json().catch(() => null)) as
+    | KeepaProductResponse
+    | null;
 
   if (!response.ok) {
     throw new Error(
