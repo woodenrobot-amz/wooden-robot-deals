@@ -61,7 +61,6 @@ export async function POST(request: Request) {
       asin,
       title: String(enrichment.title || `Amazon product ${asin}`),
       brand: String(enrichment.brand || "Unknown Brand"),
-      brand_tier: String(enrichment.brand_tier || "unrated"),
       category_id: candidate.category_id || enrichment.category_id || null,
       image_url: enrichment.image_url || null,
       amazon_url: enrichment.amazon_url || `https://www.amazon.com/dp/${asin}`,
