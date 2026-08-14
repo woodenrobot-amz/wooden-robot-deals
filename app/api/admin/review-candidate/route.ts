@@ -38,14 +38,20 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   const { data: candidate, error } = await admin
     .from("deal_candidates")
-    .select("asin, stream_id, category_id, raw_data")
+    .select("asin, stream_id, category_id, status, raw_data")
     .eq("asin", asin)
     .eq("stream_id", streamId)
-    .eq("status", "enriched")
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!candidate) return NextResponse.json({ error: "Candidate is no longer available." }, { status: 404 });
+
+  if (action !== "publish" && candidate.status !== "enriched") {
+    return NextResponse.json(
+      { error: "Only pending candidates can be rejected or ignored." },
+      { status: 409 },
+    );
+  }
 
   const rawData = toRecord(candidate.raw_data);
   const enrichment = toRecord(rawData.enrichment);
@@ -69,17 +75,45 @@ export async function POST(request: Request) {
       expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
     };
 
-    const { data: existing } = await admin
+    const { data: existing, error: existingError } = await admin
       .from("deals")
       .select("id")
       .eq("asin", asin)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
-    const write = existing
-      ? await admin.from("deals").update(deal).eq("id", existing.id)
-      : await admin.from("deals").insert(deal);
+    if (existingError) {
+      return NextResponse.json({ error: existingError.message }, { status: 500 });
+    }
 
-    if (write.error) return NextResponse.json({ error: write.error.message }, { status: 500 });
+    const write = existing
+      ? await admin
+          .from("deals")
+          .update(deal)
+          .eq("id", existing.id)
+          .select("id, asin, status, expires_at")
+          .single()
+      : await admin
+          .from("deals")
+          .insert(deal)
+          .select("id, asin, status, expires_at")
+          .single();
+
+    if (write.error) {
+      return NextResponse.json({ error: write.error.message }, { status: 500 });
+    }
+
+    if (
+      !write.data ||
+      write.data.status !== "active" ||
+      new Date(write.data.expires_at).getTime() <= Date.now()
+    ) {
+      return NextResponse.json(
+        { error: "Supabase did not confirm an active, unexpired deal row." },
+        { status: 500 },
+      );
+    }
   }
 
   if (action === "ignore") {
