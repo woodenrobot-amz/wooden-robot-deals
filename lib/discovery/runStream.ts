@@ -1,29 +1,40 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runKeepaDiscovery } from "@/lib/keepa/discovery";
 
+function normalizeStreamIdentifier(value: unknown) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/three/g, "3")
+    .replace(/[^a-z0-9]/g, "");
+}
+
 export async function runStream(streamName: string) {
   const supabase = createAdminClient();
 
-  const streamAliases: Record<string, string[]> = {
-    three_d_printing: ["three_d_printing", "3d_printing"],
-  };
-  const candidateIds = streamAliases[streamName] || [streamName];
-
   const { data: streams, error } = await supabase
     .from("discovery_streams")
-    .select("*")
-    .in("id", candidateIds);
+    .select("*");
 
   if (error) {
-    throw new Error(`Failed to load stream ${streamName}: ${error.message}`);
+    throw new Error(`Failed to load discovery streams: ${error.message}`);
   }
 
+  const requested = normalizeStreamIdentifier(streamName);
   const stream =
-    streams?.find((candidate) => candidate.id === streamName) || streams?.[0];
+    streams?.find((candidate) => candidate.id === streamName) ||
+    streams?.find(
+      (candidate) =>
+        normalizeStreamIdentifier(candidate.id) === requested ||
+        normalizeStreamIdentifier(candidate.category_id) === requested,
+    );
 
   if (!stream) {
+    const available = (streams || [])
+      .map((candidate) => String(candidate.id))
+      .sort()
+      .join(", ");
     throw new Error(
-      `Stream not found: ${streamName}. Checked: ${candidateIds.join(", ")}.`,
+      `Stream not found: ${streamName}. Configured stream IDs: ${available || "none"}.`,
     );
   }
 
