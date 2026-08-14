@@ -10,6 +10,7 @@ export type KeepaProduct = {
   };
   rating?: number;
   reviewCount?: number;
+  salesRanks?: number[];
   parentAsin?: string;
 };
 
