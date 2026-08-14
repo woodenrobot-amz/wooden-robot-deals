@@ -5,6 +5,7 @@ import { getBrandTierMap, normalizeBrandName } from "@/lib/brandTiers";
 import {
   getKeepaBestPrice,
   getKeepaImageUrl,
+  getKeepaLandedPrice,
   getKeepaProductsByAsins,
 } from "@/lib/keepa/product";
 import { scoreDeal } from "@/lib/scoring";
@@ -221,8 +222,28 @@ export async function enrichCandidateQueue(requestedLimit?: number) {
       amazonItem?.title || product.title || `Amazon product ${asin}`;
     const imageUrl = amazonItem?.imageUrl || getKeepaImageUrl(product);
     const keepaPrices = getKeepaBestPrice(product);
+    const keepaLanded = getKeepaLandedPrice(product);
     const currentPrice = amazonItem?.currentPrice || keepaPrices.currentPrice;
     const avg90Price = keepaPrices.avg90Price;
+    const estimatedShipping =
+      amazonItem?.currentPrice != null &&
+      keepaLanded.currentLandedPrice != null &&
+      keepaLanded.currentLandedPrice > amazonItem.currentPrice
+        ? Math.round(
+            (keepaLanded.currentLandedPrice - amazonItem.currentPrice) * 100,
+          ) / 100
+        : 0;
+    const effectiveDiscountPercent =
+      keepaLanded.currentLandedPrice != null &&
+      keepaLanded.avg90LandedPrice != null &&
+      keepaLanded.avg90LandedPrice > 0
+        ? Math.round(
+            ((keepaLanded.avg90LandedPrice -
+              keepaLanded.currentLandedPrice) /
+              keepaLanded.avg90LandedPrice) *
+              1000,
+          ) / 10
+        : null;
     const matchedBrand = brandTierMap.get(normalizeBrandName(brand));
     const brandTier = matchedBrand?.tier || "unrated";
     const brandBonus = matchedBrand?.score_bonus || 0;
