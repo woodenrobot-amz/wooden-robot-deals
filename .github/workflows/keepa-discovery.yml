@@ -2,8 +2,11 @@ name: Keepa Discovery
 
 on:
   schedule:
-    # Four conservative daily discovery runs, staggered in UTC.
-    - cron: "10 5,9,13,17 * * *"
+    # Separate cron identities let delayed GitHub runs retain their intended stream.
+    - cron: "10 5 * * *"
+    - cron: "10 9 * * *"
+    - cron: "10 13 * * *"
+    - cron: "10 17 * * *"
   workflow_dispatch:
     inputs:
       stream_name:
@@ -42,13 +45,13 @@ jobs:
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             stream="$MANUAL_STREAM"
           else
-            case "$(date -u +%H)" in
-              05) stream="woodworking_core" ;;
-              09) stream="power_tools" ;;
-              13) stream="three_d_printing" ;;
-              17) stream="deals_for_dudes" ;;
+            case "$SCHEDULE" in
+              "10 5 * * *") stream="woodworking_core" ;;
+              "10 9 * * *") stream="power_tools" ;;
+              "10 13 * * *") stream="three_d_printing" ;;
+              "10 17 * * *") stream="deals_for_dudes" ;;
               *)
-                echo "::error::No stream is mapped to the current UTC hour."
+                echo "::error::No stream is mapped to schedule: $SCHEDULE"
                 exit 1
                 ;;
             esac
