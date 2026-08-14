@@ -16,9 +16,16 @@ on:
         type: choice
         options:
           - woodworking_core
-          - power_tools
-          - three_d_printing
-          - deals_for_dudes
+          - woodworking_general
+          - outdoor_power_tools
+          - automotive_tools
+          - garage_storage
+          - trusted_sellers
+          - dad_power
+          - tech_deals
+          - edc_flashlights
+          - edc_knives
+          - grilling
 
 permissions:
   contents: read
@@ -47,9 +54,9 @@ jobs:
           else
             case "$SCHEDULE" in
               "10 5 * * *") stream="woodworking_core" ;;
-              "10 9 * * *") stream="power_tools" ;;
-              "10 13 * * *") stream="three_d_printing" ;;
-              "10 17 * * *") stream="deals_for_dudes" ;;
+              "10 9 * * *") stream="outdoor_power_tools" ;;
+              "10 13 * * *") stream="tech_deals" ;;
+              "10 17 * * *") stream="dad_power" ;;
               *)
                 echo "::error::No stream is mapped to schedule: $SCHEDULE"
                 exit 1
