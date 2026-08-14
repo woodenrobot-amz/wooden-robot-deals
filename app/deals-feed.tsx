@@ -50,7 +50,18 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
     const saved = window.localStorage.getItem(HIDDEN_DEALS_KEY);
 
     if (saved) {
-      setHiddenDealIds(JSON.parse(saved));
+      queueMicrotask(() => {
+        try {
+          const parsed: unknown = JSON.parse(saved);
+          setHiddenDealIds(
+            Array.isArray(parsed)
+              ? parsed.filter((value): value is string => typeof value === "string")
+              : [],
+          );
+        } catch {
+          window.localStorage.removeItem(HIDDEN_DEALS_KEY);
+        }
+      });
     }
   }, []);
 
