@@ -8,6 +8,12 @@ type ScoreComponents = {
   brandScore?: number;
   demandScore?: number;
   confidenceScore?: number;
+  shippingCheck?: {
+    amazonPrice?: number | null;
+    keepaLandedPrice?: number | null;
+    estimatedShipping?: number | null;
+    effectiveDiscountPercent?: number | null;
+  };
 };
 
 type Enrichment = {
@@ -27,6 +33,10 @@ type Enrichment = {
   rating?: number | null;
   review_count?: number | null;
   sales_rank?: number | null;
+  amazon_price?: number | null;
+  keepa_landed_price?: number | null;
+  estimated_shipping?: number | null;
+  effective_discount_percent?: number | null;
 };
 
 type Candidate = {
