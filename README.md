@@ -53,7 +53,9 @@ Required GitHub Actions secrets:
 - `APP_URL` — the deployed app origin, such as `https://example.vercel.app`
 - `AUTOMATION_SECRET` — the same random value configured in Vercel
 
-After deployment, run the workflow manually for one stream before relying on the schedule. Discovery writes results to `deal_candidates`; automatic enrichment and publication are intentionally handled in later pipeline stages.
+After deployment, run the workflow manually for one stream before relying on the schedule. Discovery writes results to `deal_candidates`.
+
+The `Enrich Deal Candidates` workflow processes up to 50 queued records per hour. It batches Keepa product requests, hydrates current public data through Amazon Creators API, applies brand tiers and scoring, and stores the review payload in `deal_candidates.raw_data.enrichment` with status `enriched`. It does not publish deals automatically.
 
 ## Learn More
 
