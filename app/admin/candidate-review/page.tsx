@@ -21,6 +21,41 @@ export default async function CandidateReviewPage() {
 
   if (error) throw new Error(`Failed to load review candidates: ${error.message}`);
 
+  const candidates = data || [];
+  const publishedAsins = [
+    ...new Set(
+      candidates
+        .filter((candidate) => candidate.status === "published")
+        .map((candidate) => candidate.asin),
+    ),
+  ];
+  const { data: liveDeals, error: liveError } =
+    publishedAsins.length > 0
+      ? await admin
+          .from("deals")
+          .select("asin, status, expires_at")
+          .in("asin", publishedAsins)
+      : { data: [], error: null };
+
+  if (liveError) {
+    throw new Error(`Failed to verify published deals: ${liveError.message}`);
+  }
+
+  const now = Date.now();
+  const liveAsins = new Set(
+    (liveDeals || [])
+      .filter(
+        (deal) =>
+          deal.status === "active" &&
+          new Date(deal.expires_at).getTime() > now,
+      )
+      .map((deal) => deal.asin),
+  );
+  const reviewCandidates = candidates.map((candidate) => ({
+    ...candidate,
+    is_live: liveAsins.has(candidate.asin),
+  }));
+
   return (
     <main className="min-h-screen bg-zinc-950 px-4 py-8 text-white">
       <div className="mx-auto max-w-6xl">
@@ -34,7 +69,7 @@ export default async function CandidateReviewPage() {
             Review enriched finds visually before they reach the live deals feed.
           </p>
         </div>
-        <CandidateReviewList initialCandidates={data || []} />
+        <CandidateReviewList initialCandidates={reviewCandidates} />
       </div>
     </main>
   );
