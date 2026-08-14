@@ -37,9 +37,9 @@ The workflow fails clearly if either secret is missing or Supabase does not retu
 The `Keepa Discovery` workflow calls the deployed app's protected automation endpoint and rotates through four initial streams:
 
 - `woodworking_core`
-- `power_tools`
-- `three_d_printing`
-- `deals_for_dudes`
+- `outdoor_power_tools`
+- `tech_deals`
+- `dad_power`
 
 Required Vercel environment variables:
 
