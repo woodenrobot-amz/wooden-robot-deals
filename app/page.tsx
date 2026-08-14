@@ -1,6 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DealsFeed } from "./deals-feed";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function Home() {
   const supabase = createAdminClient();
   const { data: deals, error } = await supabase
