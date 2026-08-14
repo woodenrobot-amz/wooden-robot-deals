@@ -1,14 +1,16 @@
-import { supabase } from "@/lib/supabase";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { DealsFeed } from "./deals-feed";
 
 export default async function Home() {
+  const supabase = createAdminClient();
   const { data: deals, error } = await supabase
     .from("deals")
     .select("*, categories(name)")
     .eq("status", "active")
     .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
     .order("deal_score", { ascending: false })
-    .limit(50);
+    .limit(100);
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
