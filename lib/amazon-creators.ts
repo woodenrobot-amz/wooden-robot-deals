@@ -40,8 +40,6 @@ async function getAmazonAccessToken(): Promise<string> {
 
   const data = await res.json();
 
-  const items = data?.items ?? data?.Items ?? [];
-
   cachedToken = {
     accessToken: data.access_token,
     expiresAt: Date.now() + (data.expires_in - 60) * 1000,
@@ -49,6 +47,24 @@ async function getAmazonAccessToken(): Promise<string> {
 
   return cachedToken.accessToken;
 }
+
+type AmazonApiItem = {
+  asin?: string;
+  ASIN?: string;
+  parentASIN?: string;
+  detailPageURL?: string;
+  itemInfo?: {
+    title?: { displayValue?: string };
+    byLineInfo?: { brand?: { displayValue?: string } };
+  };
+  images?: { primary?: { medium?: { url?: string } } };
+  offersV2?: {
+    listings?: Array<{
+      price?: { money?: { amount?: number; displayAmount?: string } };
+      availability?: { message?: string; displayValue?: string };
+    }>;
+  };
+};
 
 export type AmazonPublicItem = {
   asin: string;
@@ -108,7 +124,7 @@ export async function getAmazonItems(
 
   const items = data?.itemsResult?.items ?? data?.items ?? data?.Items ?? [];
 
-  return items.map((item: any): AmazonPublicItem => {
+  return (items as AmazonApiItem[]).map((item): AmazonPublicItem => {
     const asin = item?.asin ?? item?.ASIN ?? "";
     const priceMoney = item?.offersV2?.listings?.[0]?.price?.money;
 

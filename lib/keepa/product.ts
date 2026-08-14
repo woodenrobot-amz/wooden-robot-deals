@@ -1,4 +1,27 @@
+export type KeepaProduct = {
+  asin?: string;
+  brand?: string;
+  title?: string;
+  imagesCSV?: string;
+  images?: Array<{ l?: string; m?: string }>;
+  stats?: {
+    current?: unknown[];
+    avg90?: unknown[];
+  };
+  rating?: number;
+  reviewCount?: number;
+  salesRanks?: number[];
+  parentAsin?: string;
+};
+
+type KeepaProductResponse = {
+  products?: KeepaProduct[];
+  tokensLeft?: number;
+  tokensConsumed?: number;
+};
+
 const KEEPA_DOMAIN_US = 1;
+const KEEPA_PRODUCT_BATCH_LIMIT = 100;
 
 export function keepaCentsToDollars(value: unknown) {
   const cents = Number(value);
@@ -8,7 +31,7 @@ export function keepaCentsToDollars(value: unknown) {
   return Math.round((cents / 100) * 100) / 100;
 }
 
-export function getKeepaImageUrl(product: any) {
+export function getKeepaImageUrl(product: KeepaProduct) {
   if (product.imagesCSV) {
     return `https://images-na.ssl-images-amazon.com/images/I/${
       String(product.imagesCSV).split(",")[0]
@@ -30,7 +53,7 @@ export function getKeepaImageUrl(product: any) {
   return "";
 }
 
-export function getKeepaBestPrice(product: any) {
+export function getKeepaBestPrice(product: KeepaProduct) {
   const current = product?.stats?.current || [];
   const avg90 = product?.stats?.avg90 || [];
 
@@ -46,29 +69,69 @@ export function getKeepaBestPrice(product: any) {
   return { currentPrice, avg90Price };
 }
 
-export async function getKeepaProductByAsin(asin: string) {
+export async function getKeepaProductsByAsins(asins: string[]) {
   const keepaKey = process.env.KEEPA_API_KEY;
 
   if (!keepaKey) {
     throw new Error("Missing KEEPA_API_KEY environment variable.");
   }
 
+  const cleanAsins = [
+    ...new Set(
+      asins
+        .map((asin) => asin.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ];
+
+  if (cleanAsins.length === 0) {
+    return {
+      products: [],
+      tokensLeft: null,
+      tokensConsumed: 0,
+    };
+  }
+
+  if (cleanAsins.length > KEEPA_PRODUCT_BATCH_LIMIT) {
+    throw new Error(
+      `Keepa product batches cannot exceed ${KEEPA_PRODUCT_BATCH_LIMIT} ASINs.`,
+    );
+  }
+
   const keepaUrl = new URL("https://api.keepa.com/product");
   keepaUrl.searchParams.set("key", keepaKey);
   keepaUrl.searchParams.set("domain", String(KEEPA_DOMAIN_US));
-  keepaUrl.searchParams.set("asin", asin);
+  keepaUrl.searchParams.set("asin", cleanAsins.join(","));
   keepaUrl.searchParams.set("stats", "90");
 
   const response = await fetch(keepaUrl.toString(), {
+    headers: {
+      Accept: "application/json",
+      "Accept-Encoding": "gzip",
+    },
     cache: "no-store",
   });
 
+  const data = (await response.json().catch(() => null)) as
+    | KeepaProductResponse
+    | null;
+
   if (!response.ok) {
-    throw new Error(`Keepa request failed: ${response.status}`);
+    throw new Error(
+      `Keepa request failed: ${response.status} ${JSON.stringify(data)}`,
+    );
   }
 
-  const data = await response.json();
-  const product = data.products?.[0];
+  return {
+    products: data?.products || [],
+    tokensLeft: data?.tokensLeft ?? null,
+    tokensConsumed: data?.tokensConsumed ?? null,
+  };
+}
+
+export async function getKeepaProductByAsin(asin: string) {
+  const result = await getKeepaProductsByAsins([asin]);
+  const product = result.products[0];
 
   if (!product) {
     throw new Error("No Keepa product found for that ASIN.");

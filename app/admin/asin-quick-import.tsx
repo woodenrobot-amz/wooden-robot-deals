@@ -66,9 +66,9 @@ export function AsinQuickImport() {
 
       const text = await response.text();
 
-      let data: any;
+      let data: EnrichedDeal | { error?: string };
       try {
-        data = JSON.parse(text);
+        data = JSON.parse(text) as EnrichedDeal | { error?: string };
       } catch {
         setMessage(
           text
@@ -79,11 +79,13 @@ export function AsinQuickImport() {
       }
 
       if (!response.ok) {
-        setMessage(data.error || `API returned ${response.status}`);
+        setMessage(
+          ("error" in data && data.error) || `API returned ${response.status}`,
+        );
         return;
       }
 
-      setResult(data);
+      setResult(data as EnrichedDeal);
       setMessage("Fetched deal preview.");
     } catch (error) {
       console.error(error);
