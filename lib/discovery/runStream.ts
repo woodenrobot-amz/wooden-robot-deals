@@ -55,5 +55,6 @@ export async function runStream(streamName: string) {
     asins: discoveryResults.asinList,
     totalResults: discoveryResults.totalResults,
     tokensLeft: discoveryResults.tokensLeft,
+    tokensConsumed: discoveryResults.tokensConsumed,
   };
 }
