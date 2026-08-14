@@ -53,6 +53,16 @@ export function getKeepaImageUrl(product: KeepaProduct) {
   return "";
 }
 
+export function getKeepaLandedPrice(product: KeepaProduct) {
+  const current = product?.stats?.current || [];
+  const avg90 = product?.stats?.avg90 || [];
+
+  return {
+    currentLandedPrice: keepaCentsToDollars(current[18]),
+    avg90LandedPrice: keepaCentsToDollars(avg90[18]),
+  };
+}
+
 export function getKeepaBestPrice(product: KeepaProduct) {
   const current = product?.stats?.current || [];
   const avg90 = product?.stats?.avg90 || [];
