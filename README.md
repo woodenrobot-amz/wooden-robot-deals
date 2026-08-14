@@ -31,6 +31,30 @@ Add these repository Actions secrets before running it:
 
 The workflow fails clearly if either secret is missing or Supabase does not return a successful response.
 
+
+## Automated Keepa discovery
+
+The `Keepa Discovery` workflow calls the deployed app's protected automation endpoint and rotates through four initial streams:
+
+- `woodworking_core`
+- `power_tools`
+- `three_d_printing`
+- `deals_for_dudes`
+
+Required Vercel environment variables:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `KEEPA_API_KEY`
+- `AUTOMATION_SECRET`
+
+Required GitHub Actions secrets:
+
+- `APP_URL` — the deployed app origin, such as `https://example.vercel.app`
+- `AUTOMATION_SECRET` — the same random value configured in Vercel
+
+After deployment, run the workflow manually for one stream before relying on the schedule. Discovery writes results to `deal_candidates`; automatic enrichment and publication are intentionally handled in later pipeline stages.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
