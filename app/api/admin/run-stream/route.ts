@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
 import { runStream } from "@/lib/discovery/runStream";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await request.json();
-
-    const streamName = body.streamName;
+    const streamName = String(body.streamName || "").trim();
 
     if (!streamName) {
       return NextResponse.json(
