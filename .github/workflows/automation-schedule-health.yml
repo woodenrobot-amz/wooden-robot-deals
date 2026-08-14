@@ -1,0 +1,193 @@
+name: Automation Schedule Health
+
+on:
+  schedule:
+    # Daily audit after the final scheduled discovery run (3:15 PM EDT).
+    - cron: "15 19 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: automation-schedule-health
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Audit scheduled workflow history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          audit_dir="$(mktemp -d)"
+          trap 'rm -rf "$audit_dir"' EXIT
+
+          fetch_runs() {
+            local workflow_file="$1"
+            local output_file="$2"
+
+            gh api               --paginate               --method GET               "/repos/$REPOSITORY/actions/workflows/$workflow_file/runs?event=schedule&per_page=100"               --jq '.workflow_runs[] | [.created_at, .status, (.conclusion // ""), .html_url] | @tsv'               > "$output_file"
+          }
+
+          fetch_runs "keepa-discovery.yml" "$audit_dir/discovery.tsv"
+          fetch_runs "enrich-candidates.yml" "$audit_dir/enrichment.tsv"
+
+          python - "$audit_dir" "$GITHUB_STEP_SUMMARY" <<'PY'
+          import csv
+          import datetime as dt
+          import pathlib
+          import sys
+
+          audit_dir = pathlib.Path(sys.argv[1])
+          summary_path = pathlib.Path(sys.argv[2])
+          now = dt.datetime.now(dt.timezone.utc)
+          recent_cutoff = now - dt.timedelta(hours=26)
+          history_cutoff = now - dt.timedelta(days=30)
+
+          workflows = [
+              {
+                  "name": "Keepa Discovery",
+                  "file": "discovery.tsv",
+                  "recent_expected": 4,
+              },
+              {
+                  "name": "Candidate Enrichment",
+                  "file": "enrichment.tsv",
+                  # Allow two hours of GitHub scheduling delay in the 26-hour window.
+                  "recent_expected": 22,
+              },
+          ]
+
+          failures = []
+          rows = []
+
+          for workflow in workflows:
+              records = []
+              path = audit_dir / workflow["file"]
+
+              if path.exists():
+                  with path.open(newline="", encoding="utf-8") as handle:
+                      for created_at, status, conclusion, url in csv.reader(
+                          handle, delimiter="\t"
+                      ):
+                          records.append(
+                              {
+                                  "created_at": dt.datetime.fromisoformat(
+                                      created_at.replace("Z", "+00:00")
+                                  ),
+                                  "status": status,
+                                  "conclusion": conclusion,
+                                  "url": url,
+                              }
+                          )
+
+              recent = [
+                  record for record in records
+                  if record["created_at"] >= recent_cutoff
+              ]
+              history = [
+                  record for record in records
+                  if record["created_at"] >= history_cutoff
+              ]
+              recent_completed = [
+                  record for record in recent
+                  if record["status"] == "completed"
+              ]
+              recent_success = [
+                  record for record in recent_completed
+                  if record["conclusion"] == "success"
+              ]
+              recent_bad = [
+                  record for record in recent_completed
+                  if record["conclusion"] != "success"
+              ]
+              history_completed = [
+                  record for record in history
+                  if record["status"] == "completed"
+              ]
+              history_success = [
+                  record for record in history_completed
+                  if record["conclusion"] == "success"
+              ]
+
+              if len(recent) < workflow["recent_expected"]:
+                  failures.append(
+                      f'{workflow["name"]}: expected at least '
+                      f'{workflow["recent_expected"]} scheduled runs in 26 hours, '
+                      f'found {len(recent)}.'
+                  )
+
+              if recent_bad:
+                  failures.append(
+                      f'{workflow["name"]}: {len(recent_bad)} scheduled run(s) '
+                      'failed or were cancelled in the last 26 hours.'
+                  )
+
+              latest = max(records, key=lambda record: record["created_at"]) if records else None
+              latest_text = (
+                  latest["created_at"].strftime("%Y-%m-%d %H:%M UTC")
+                  if latest
+                  else "No scheduled run found"
+              )
+              recent_rate = (
+                  f'{len(recent_success) / len(recent_completed) * 100:.1f}%'
+                  if recent_completed
+                  else "n/a"
+              )
+              history_rate = (
+                  f'{len(history_success) / len(history_completed) * 100:.1f}%'
+                  if history_completed
+                  else "n/a"
+              )
+
+              rows.append(
+                  (
+                      workflow["name"],
+                      len(recent),
+                      workflow["recent_expected"],
+                      recent_rate,
+                      history_rate,
+                      latest_text,
+                  )
+              )
+
+          lines = [
+              "# Automation Schedule Health",
+              "",
+              f"Audited at {now.strftime('%Y-%m-%d %H:%M UTC')}. "
+              "Manual workflow runs are excluded.",
+              "",
+              "| Workflow | Runs / 26h | Expected | 26h success | 30d success | Latest scheduled run |",
+              "| --- | ---: | ---: | ---: | ---: | --- |",
+          ]
+
+          for row in rows:
+              lines.append(
+                  f"| {row[0]} | {row[1]} | ≥{row[2]} | {row[3]} | {row[4]} | {row[5]} |"
+              )
+
+          lines.extend(["", "## Result", ""])
+
+          if failures:
+              lines.append("❌ Schedule health check failed.")
+              lines.extend(f"- {failure}" for failure in failures)
+          else:
+              lines.append("✅ All expected scheduled runs completed successfully.")
+
+          summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+          if failures:
+              for failure in failures:
+                  print(f"::error::{failure}")
+              raise SystemExit(1)
+
+          print("All scheduled automation checks passed.")
+          PY
