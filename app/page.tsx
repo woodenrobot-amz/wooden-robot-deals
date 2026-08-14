@@ -26,6 +26,10 @@ export default async function Home() {
           <p className="mt-2 text-sm text-zinc-400">
             Curated deals for tools, garage, tech, EDC, and useful guy stuff.
           </p>
+          <p className="mt-3 border-l-2 border-amber-400 pl-3 text-xs text-zinc-500">
+            As an Amazon Associate, Wooden Robot earns from qualifying
+            purchases.
+          </p>
         </header>
 
         {error && (
