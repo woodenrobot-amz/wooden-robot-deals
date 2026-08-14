@@ -39,6 +39,7 @@ jobs:
 
           fetch_runs "keepa-discovery.yml" "$audit_dir/discovery.tsv"
           fetch_runs "enrich-candidates.yml" "$audit_dir/enrichment.tsv"
+          fetch_runs "refresh-live-deals.yml" "$audit_dir/lifecycle.tsv"
 
           python - "$audit_dir" "$GITHUB_STEP_SUMMARY" <<'PY'
           import csv
@@ -63,6 +64,12 @@ jobs:
                   "file": "enrichment.tsv",
                   # Allow two hours of GitHub scheduling delay in the 26-hour window.
                   "recent_expected": 22,
+              },
+              {
+                  "name": "Live Deal Lifecycle",
+                  "file": "lifecycle.tsv",
+                  # Four runs per day, allowing one delayed schedule.
+                  "recent_expected": 3,
               },
           ]
 
