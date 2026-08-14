@@ -1,0 +1,49 @@
+name: Supabase Heartbeat
+
+on:
+  schedule:
+    # Four small database reads per day keep the free project active.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-heartbeat
+  cancel-in-progress: false
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Query Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$SUPABASE_URL" || -z "$SUPABASE_PUBLISHABLE_KEY" ]]; then
+            echo "::error::Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY as repository Actions secrets."
+            exit 1
+          fi
+
+          curl_args=(
+            --fail-with-body
+            --silent
+            --show-error
+            --retry 3
+            --retry-all-errors
+            --connect-timeout 10
+            --max-time 30
+            --header "apikey: $SUPABASE_PUBLISHABLE_KEY"
+            --header "Accept: application/json"
+          )
+
+          curl "${curl_args[@]}" "${SUPABASE_URL%/}/rest/v1/deals?select=id&limit=1"
+
+          echo
+          echo "Supabase heartbeat completed successfully."
