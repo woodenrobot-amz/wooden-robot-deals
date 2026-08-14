@@ -34,6 +34,7 @@ type Candidate = {
   stream_id: string;
   category_id: string | null;
   status: "enriched" | "published";
+  is_live: boolean;
   raw_data: { enrichment?: Enrichment } | null;
 };
 
@@ -125,7 +126,7 @@ export function CandidateReviewList({
         ? current.map((item) =>
             item.asin === candidate.asin &&
             item.stream_id === candidate.stream_id
-              ? { ...item, status: "published" }
+              ? { ...item, status: "published", is_live: true }
               : item,
           )
         : current.filter(
@@ -200,17 +201,24 @@ export function CandidateReviewList({
             <article
               key={key}
               className={`rounded-2xl border p-4 ${
-                candidate.status === "published"
+                candidate.status === "published" && candidate.is_live
                   ? "border-green-400/50 bg-green-950/20"
+                  : candidate.status === "published"
+                    ? "border-amber-400/50 bg-amber-950/20"
                   : "border-zinc-800 bg-zinc-900"
               }`}
             >
-              {candidate.status === "published" && (
+              {candidate.status === "published" && candidate.is_live && (
                 <div className="mb-3 flex items-center justify-between rounded-xl bg-green-400/10 px-3 py-2 text-sm font-bold text-green-300">
                   <span>✓ Published · Live</span>
                   <a href="/admin/manage-deals" className="font-medium underline">
                     Manage live deal
                   </a>
+                </div>
+              )}
+              {candidate.status === "published" && !candidate.is_live && (
+                <div className="mb-3 rounded-xl bg-amber-400/10 px-3 py-2 text-sm font-bold text-amber-300">
+                  ⚠ Published decision recorded, but no active live deal was found
                 </div>
               )}
               <div className="flex gap-4">
@@ -296,10 +304,18 @@ export function CandidateReviewList({
                     Ignore
                   </button>
                 </div>
-              ) : (
+              ) : candidate.is_live ? (
                 <div className="mt-4 rounded-xl bg-green-400 px-3 py-2 text-center text-sm font-bold text-zinc-950">
                   Published on the live website
                 </div>
+              ) : (
+                <button
+                  onClick={() => review(candidate, "publish")}
+                  disabled={Boolean(busyKey)}
+                  className="mt-4 w-full rounded-xl bg-amber-400 px-3 py-2 text-sm font-bold text-zinc-950 disabled:opacity-50"
+                >
+                  {busyKey === key ? "Repairing..." : "Republish and repair"}
+                </button>
               )}
             </article>
           );
