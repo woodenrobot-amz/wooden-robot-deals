@@ -152,13 +152,15 @@ export async function enrichCandidateQueue(requestedLimit?: number) {
   const brandTierMap = await getBrandTierMap();
 
   const keepaByAsin = new Map(
-    keepaResult.products.map((product: any) => [
-      String(product.asin || "").toUpperCase(),
-      product,
-    ]),
+    keepaResult.products.map(
+      (product) =>
+        [String(product.asin || "").toUpperCase(), product] as const,
+    ),
   );
   const amazonByAsin = new Map(
-    amazonResult.items.map((item) => [item.asin.toUpperCase(), item]),
+    amazonResult.items.map(
+      (item) => [item.asin.toUpperCase(), item] as const,
+    ),
   );
 
   let enriched = 0;
