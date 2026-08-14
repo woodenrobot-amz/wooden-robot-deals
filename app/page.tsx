@@ -45,6 +45,11 @@ export default async function Home() {
           availability information displayed on Amazon at the time of purchase
           will apply to the purchase of this product.
         </p>
+        <p className="mt-2 uppercase">
+          Certain content that appears on this site comes from Amazon. This
+          content is provided “as is” and is subject to change or removal at any
+          time.
+        </p>
       </footer>
     </main>
   );

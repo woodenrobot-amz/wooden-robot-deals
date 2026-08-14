@@ -68,7 +68,14 @@ export async function POST(request: Request) {
       avg_90_price: enrichment.avg_90_price || null,
       deal_score: Number(enrichment.deal_score || 0),
       badges: Array.isArray(enrichment.badges) ? enrichment.badges : [],
-      scoring_components: toRecord(enrichment.scoring_components),
+      scoring_components: {
+        ...toRecord(enrichment.scoring_components),
+        lifecycle: {
+          checkedAt: String(enrichment.enriched_at || new Date().toISOString()),
+          outcome: "published",
+          reason: null,
+        },
+      },
       status: "active",
       source: `candidate:${streamId}`,
       expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),

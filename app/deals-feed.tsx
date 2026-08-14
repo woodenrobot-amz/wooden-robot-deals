@@ -15,10 +15,27 @@ type Deal = {
   amazon_url: string | null;
   image_url: string | null;
   expires_at: string;
+  scoring_components?: {
+    lifecycle?: {
+      checkedAt?: string;
+    };
+  } | null;
   categories?: {
     name: string;
   } | null;
 };
+
+function getAmazonFreshnessText(checkedAt?: string) {
+  if (!checkedAt) return "Amazon price refresh pending";
+
+  return `Amazon price as of ${new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(new Date(checkedAt))}`;
+}
 
 function getExpirationText(expiresAt: string) {
   const now = Date.now();
@@ -243,6 +260,11 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
                 {deal.current_price != null
                   ? `$${deal.current_price}`
                   : "Check Amazon"}
+              </div>
+              <div className="mt-1 text-xs text-zinc-500">
+                {getAmazonFreshnessText(
+                  deal.scoring_components?.lifecycle?.checkedAt,
+                )}
               </div>
               <div className="mt-1 text-xs text-zinc-500">
                 Price and availability may change. Final price is shown on
