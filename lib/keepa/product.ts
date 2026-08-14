@@ -1,4 +1,5 @@
 const KEEPA_DOMAIN_US = 1;
+const KEEPA_PRODUCT_BATCH_LIMIT = 100;
 
 export function keepaCentsToDollars(value: unknown) {
   const cents = Number(value);
@@ -46,29 +47,67 @@ export function getKeepaBestPrice(product: any) {
   return { currentPrice, avg90Price };
 }
 
-export async function getKeepaProductByAsin(asin: string) {
+export async function getKeepaProductsByAsins(asins: string[]) {
   const keepaKey = process.env.KEEPA_API_KEY;
 
   if (!keepaKey) {
     throw new Error("Missing KEEPA_API_KEY environment variable.");
   }
 
+  const cleanAsins = [
+    ...new Set(
+      asins
+        .map((asin) => asin.trim().toUpperCase())
+        .filter(Boolean),
+    ),
+  ];
+
+  if (cleanAsins.length === 0) {
+    return {
+      products: [],
+      tokensLeft: null,
+      tokensConsumed: 0,
+    };
+  }
+
+  if (cleanAsins.length > KEEPA_PRODUCT_BATCH_LIMIT) {
+    throw new Error(
+      `Keepa product batches cannot exceed ${KEEPA_PRODUCT_BATCH_LIMIT} ASINs.`,
+    );
+  }
+
   const keepaUrl = new URL("https://api.keepa.com/product");
   keepaUrl.searchParams.set("key", keepaKey);
   keepaUrl.searchParams.set("domain", String(KEEPA_DOMAIN_US));
-  keepaUrl.searchParams.set("asin", asin);
+  keepaUrl.searchParams.set("asin", cleanAsins.join(","));
   keepaUrl.searchParams.set("stats", "90");
 
   const response = await fetch(keepaUrl.toString(), {
+    headers: {
+      Accept: "application/json",
+      "Accept-Encoding": "gzip",
+    },
     cache: "no-store",
   });
 
+  const data = await response.json().catch(() => null);
+
   if (!response.ok) {
-    throw new Error(`Keepa request failed: ${response.status}`);
+    throw new Error(
+      `Keepa request failed: ${response.status} ${JSON.stringify(data)}`,
+    );
   }
 
-  const data = await response.json();
-  const product = data.products?.[0];
+  return {
+    products: data?.products || [],
+    tokensLeft: data?.tokensLeft ?? null,
+    tokensConsumed: data?.tokensConsumed ?? null,
+  };
+}
+
+export async function getKeepaProductByAsin(asin: string) {
+  const result = await getKeepaProductsByAsins([asin]);
+  const product = result.products[0];
 
   if (!product) {
     throw new Error("No Keepa product found for that ASIN.");
