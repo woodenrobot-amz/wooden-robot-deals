@@ -33,6 +33,7 @@ type Candidate = {
   asin: string;
   stream_id: string;
   category_id: string | null;
+  status: "enriched" | "published";
   raw_data: { enrichment?: Enrichment } | null;
 };
 
@@ -57,6 +58,7 @@ export function CandidateReviewList({
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [minScore, setMinScore] = useState(0);
+  const [decision, setDecision] = useState("pending");
   const [busyKey, setBusyKey] = useState("");
   const [message, setMessage] = useState("");
 
@@ -82,6 +84,9 @@ export function CandidateReviewList({
           return (
             haystack.includes(search.toLowerCase()) &&
             (category === "all" || candidate.category_id === category) &&
+            (decision === "all" ||
+              (decision === "pending" && candidate.status === "enriched") ||
+              candidate.status === decision) &&
             deal.deal_score >= minScore
           );
         })
@@ -90,7 +95,7 @@ export function CandidateReviewList({
             (right.raw_data?.enrichment?.deal_score || 0) -
             (left.raw_data?.enrichment?.deal_score || 0),
         ),
-    [candidates, category, minScore, search],
+    [candidates, category, decision, minScore, search],
   );
 
   async function review(candidate: Candidate, action: ReviewAction) {
@@ -116,10 +121,18 @@ export function CandidateReviewList({
     }
 
     setCandidates((current) =>
-      current.filter(
-        (item) =>
-          item.asin !== candidate.asin || item.stream_id !== candidate.stream_id,
-      ),
+      action === "publish"
+        ? current.map((item) =>
+            item.asin === candidate.asin &&
+            item.stream_id === candidate.stream_id
+              ? { ...item, status: "published" }
+              : item,
+          )
+        : current.filter(
+            (item) =>
+              item.asin !== candidate.asin ||
+              item.stream_id !== candidate.stream_id,
+          ),
     );
     setMessage(
       action === "publish"
@@ -133,12 +146,12 @@ export function CandidateReviewList({
 
   return (
     <section className="mt-6">
-      <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 md:grid-cols-4">
+      <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 lg:grid-cols-5">
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search title, brand, ASIN"
-          className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none md:col-span-2"
+          className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none lg:col-span-2"
         />
         <select
           value={category}
@@ -160,10 +173,19 @@ export function CandidateReviewList({
           <option value={55}>Score 55+</option>
           <option value={75}>Score 75+</option>
         </select>
+        <select
+          value={decision}
+          onChange={(event) => setDecision(event.target.value)}
+          className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
+        >
+          <option value="pending">Pending review</option>
+          <option value="published">Published</option>
+          <option value="all">All decisions</option>
+        </select>
       </div>
 
       <div className="mt-3 flex items-center justify-between text-sm text-zinc-400">
-        <span>Showing {visible.length} of {candidates.length} enriched candidates</span>
+        <span>Showing {visible.length} of {candidates.length} review candidates</span>
         {message && <span className="text-amber-300">{message}</span>}
       </div>
 
@@ -175,7 +197,22 @@ export function CandidateReviewList({
           const components = deal.scoring_components || {};
 
           return (
-            <article key={key} className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
+            <article
+              key={key}
+              className={`rounded-2xl border p-4 ${
+                candidate.status === "published"
+                  ? "border-green-400/50 bg-green-950/20"
+                  : "border-zinc-800 bg-zinc-900"
+              }`}
+            >
+              {candidate.status === "published" && (
+                <div className="mb-3 flex items-center justify-between rounded-xl bg-green-400/10 px-3 py-2 text-sm font-bold text-green-300">
+                  <span>✓ Published · Live</span>
+                  <a href="/admin/manage-deals" className="font-medium underline">
+                    Manage live deal
+                  </a>
+                </div>
+              )}
               <div className="flex gap-4">
                 <div className="flex h-32 w-32 shrink-0 items-center justify-center rounded-xl bg-white p-2">
                   {deal.image_url ? (
@@ -235,29 +272,35 @@ export function CandidateReviewList({
                 <a href={deal.keepa_url} target="_blank" rel="noreferrer" className="text-amber-400">Keepa ↗</a>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => review(candidate, "publish")}
-                  disabled={Boolean(busyKey)}
-                  className="rounded-xl bg-green-400 px-3 py-2 text-sm font-bold text-zinc-950 disabled:opacity-50"
-                >
-                  {busyKey === key ? "Working..." : "Publish"}
-                </button>
-                <button
-                  onClick={() => review(candidate, "reject")}
-                  disabled={Boolean(busyKey)}
-                  className="rounded-xl bg-zinc-700 px-3 py-2 text-sm font-bold disabled:opacity-50"
-                >
-                  Reject
-                </button>
-                <button
-                  onClick={() => review(candidate, "ignore")}
-                  disabled={Boolean(busyKey)}
-                  className="rounded-xl bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300 disabled:opacity-50"
-                >
-                  Ignore
-                </button>
-              </div>
+              {candidate.status === "enriched" ? (
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => review(candidate, "publish")}
+                    disabled={Boolean(busyKey)}
+                    className="rounded-xl bg-green-400 px-3 py-2 text-sm font-bold text-zinc-950 disabled:opacity-50"
+                  >
+                    {busyKey === key ? "Working..." : "Publish"}
+                  </button>
+                  <button
+                    onClick={() => review(candidate, "reject")}
+                    disabled={Boolean(busyKey)}
+                    className="rounded-xl bg-zinc-700 px-3 py-2 text-sm font-bold disabled:opacity-50"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    onClick={() => review(candidate, "ignore")}
+                    disabled={Boolean(busyKey)}
+                    className="rounded-xl bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300 disabled:opacity-50"
+                  >
+                    Ignore
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-xl bg-green-400 px-3 py-2 text-center text-sm font-bold text-zinc-950">
+                  Published on the live website
+                </div>
+              )}
             </article>
           );
         })}
