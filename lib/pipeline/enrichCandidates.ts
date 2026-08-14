@@ -11,6 +11,7 @@ import { scoreDeal } from "@/lib/scoring";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const AMAZON_BATCH_LIMIT = 10;
+const AMAZON_BATCH_DELAY_MS = 1_100;
 const DEFAULT_BATCH_SIZE = 50;
 const MAX_BATCH_SIZE = 100;
 
@@ -37,6 +38,10 @@ function chunk<T>(items: T[], size: number) {
   return chunks;
 }
 
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 function toRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -47,8 +52,15 @@ async function getAmazonItemsInBatches(asins: string[]) {
   const items: AmazonPublicItem[] = [];
   const errors: string[] = [];
 
-  for (const batch of chunk(asins, AMAZON_BATCH_LIMIT)) {
+  const batches = chunk(asins, AMAZON_BATCH_LIMIT);
+
+  for (let index = 0; index < batches.length; index += 1) {
+    if (index > 0) {
+      await wait(AMAZON_BATCH_DELAY_MS);
+    }
+
     try {
+      const batch = batches[index];
       items.push(...(await getAmazonItems(batch)));
     } catch (error) {
       errors.push(error instanceof Error ? error.message : "Unknown Amazon error");
@@ -84,6 +96,8 @@ export async function enrichCandidateQueue(requestedLimit?: number) {
       failed: 0,
       tokensConsumed: 0,
       tokensLeft: null,
+      amazonItems: 0,
+      amazonMissing: 0,
       amazonErrors: [],
     };
   }
@@ -140,6 +154,8 @@ export async function enrichCandidateQueue(requestedLimit?: number) {
       failed: 0,
       tokensConsumed: 0,
       tokensLeft: null,
+      amazonItems: 0,
+      amazonMissing: 0,
       amazonErrors: [],
     };
   }
@@ -287,6 +303,8 @@ export async function enrichCandidateQueue(requestedLimit?: number) {
     failed,
     tokensConsumed: keepaResult.tokensConsumed,
     tokensLeft: keepaResult.tokensLeft,
+    amazonItems: amazonResult.items.length,
+    amazonMissing: Math.max(0, activeCandidates.length - amazonResult.items.length),
     amazonErrors: amazonResult.errors,
   };
 }

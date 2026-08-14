@@ -5,6 +5,24 @@ type CachedAmazonToken = {
 
 let cachedToken: CachedAmazonToken | null = null;
 
+const AMAZON_MAX_ATTEMPTS = 4;
+const AMAZON_RETRY_BASE_MS = 1_000;
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function getRetryDelay(response: Response, attempt: number) {
+  const retryAfter = response.headers.get("retry-after");
+  const retryAfterSeconds = retryAfter ? Number(retryAfter) : Number.NaN;
+
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0) {
+    return Math.max(AMAZON_RETRY_BASE_MS, retryAfterSeconds * 1_000);
+  }
+
+  return AMAZON_RETRY_BASE_MS * 2 ** attempt;
+}
+
 function requireEnv(name: string): string {
   const value = process.env[name];
 
@@ -92,32 +110,44 @@ export async function getAmazonItems(
   const accessToken = await getAmazonAccessToken();
   const partnerTag = requireEnv("AMAZON_PARTNER_TAG");
 
-  const res = await fetch("https://creatorsapi.amazon/catalog/v1/getItems", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      "x-marketplace": "www.amazon.com",
-    },
-    body: JSON.stringify({
-      itemIds: cleanAsins,
-      itemIdType: "ASIN",
-      marketplace: "www.amazon.com",
-      partnerTag,
-      resources: [
-        "images.primary.medium",
-        "itemInfo.title",
-        "itemInfo.byLineInfo",
-        "offersV2.listings.price",
-        "offersV2.listings.availability",
-        "parentASIN",
-      ],
-    }),
+  const requestBody = JSON.stringify({
+    itemIds: cleanAsins,
+    itemIdType: "ASIN",
+    marketplace: "www.amazon.com",
+    partnerTag,
+    resources: [
+      "images.primary.medium",
+      "itemInfo.title",
+      "itemInfo.byLineInfo",
+      "offersV2.listings.price",
+      "offersV2.listings.availability",
+      "parentASIN",
+    ],
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Amazon getItems failed: ${res.status} ${text}`);
+  let res: Response | null = null;
+
+  for (let attempt = 0; attempt < AMAZON_MAX_ATTEMPTS; attempt += 1) {
+    res = await fetch("https://creatorsapi.amazon/catalog/v1/getItems", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "x-marketplace": "www.amazon.com",
+      },
+      body: requestBody,
+    });
+
+    if (res.ok || res.status !== 429 || attempt === AMAZON_MAX_ATTEMPTS - 1) {
+      break;
+    }
+
+    await wait(getRetryDelay(res, attempt));
+  }
+
+  if (!res?.ok) {
+    const text = res ? await res.text() : "No response";
+    throw new Error(`Amazon getItems failed: ${res?.status ?? "unknown"} ${text}`);
   }
 
   const data = await res.json();
