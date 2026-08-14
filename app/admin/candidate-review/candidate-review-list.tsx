@@ -266,6 +266,38 @@ export function CandidateReviewList({
                 </div>
               </div>
 
+              {deal.keepa_landed_price != null && (
+                <div className={`mt-3 rounded-xl border p-3 ${
+                  (deal.estimated_shipping || 0) > 0.01
+                    ? "border-amber-400/50 bg-amber-400/10"
+                    : "border-zinc-800 bg-zinc-950"
+                }`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className={`text-sm font-bold ${(deal.estimated_shipping || 0) > 0.01 ? "text-amber-300" : "text-zinc-200"}`}>
+                        {(deal.estimated_shipping || 0) > 0.01
+                          ? `Possible shipping charge: ${money(deal.estimated_shipping)}`
+                          : "No shipping surcharge detected"}
+                      </p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Keepa estimated delivered price: {money(deal.keepa_landed_price)}
+                        {deal.effective_discount_percent != null &&
+                          ` · Effective discount ${deal.effective_discount_percent}%`}
+                      </p>
+                    </div>
+                    {(deal.estimated_shipping || 0) > 0.01 && (
+                      <span className="shrink-0 rounded-full bg-amber-400 px-2 py-1 text-[10px] font-black uppercase text-zinc-950">
+                        Check shipping
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-2 text-[11px] text-zinc-600">
+                    Estimate only. Final shipping depends on the Amazon offer,
+                    address, and customer eligibility.
+                  </p>
+                </div>
+              )}
+
               <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
                 <span>Reviews: {deal.review_count?.toLocaleString() ?? "—"}</span>
                 <span>Rank: {deal.sales_rank?.toLocaleString() ?? "—"}</span>
