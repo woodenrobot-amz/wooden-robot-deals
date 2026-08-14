@@ -41,13 +41,13 @@ export default async function CandidateReviewPage() {
     throw new Error(`Failed to verify published deals: ${liveError.message}`);
   }
 
-  const now = Date.now();
+  const now = new Date().toISOString();
   const liveAsins = new Set(
     (liveDeals || [])
       .filter(
         (deal) =>
           deal.status === "active" &&
-          new Date(deal.expires_at).getTime() > now,
+          String(deal.expires_at) > now,
       )
       .map((deal) => deal.asin),
   );
