@@ -27,7 +27,7 @@ The `Supabase Heartbeat` GitHub Actions workflow performs a small read from the 
 Add these repository Actions secrets before running it:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the Supabase publishable key)
 
 The workflow fails clearly if either secret is missing or Supabase does not return a successful response.
 
