@@ -14,6 +14,12 @@ const adminLinks = [
     description: "Review active deals, scoring, and kill bad deals.",
   },
   {
+    href: "/admin/candidate-review",
+    title: "Review Candidates",
+    description: "Compare enriched finds and publish, reject, or ignore them.",
+  },
+
+  {
     href: "/admin/ignored-asins",
     title: "Ignored ASINs",
     description: "Manage ASINs that should never be enriched.",
