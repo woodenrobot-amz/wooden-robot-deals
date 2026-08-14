@@ -35,6 +35,7 @@ jobs:
         env:
           MANUAL_STREAM: ${{ inputs.stream_name }}
           EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
         run: |
           set -euo pipefail
 
