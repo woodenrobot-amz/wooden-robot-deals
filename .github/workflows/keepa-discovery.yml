@@ -1,0 +1,91 @@
+name: Keepa Discovery
+
+on:
+  schedule:
+    # Four conservative daily discovery runs, staggered in UTC.
+    - cron: "10 5,9,13,17 * * *"
+  workflow_dispatch:
+    inputs:
+      stream_name:
+        description: Discovery stream to run
+        required: true
+        default: woodworking_core
+        type: choice
+        options:
+          - woodworking_core
+          - power_tools
+          - three_d_printing
+          - deals_for_dudes
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keepa-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Select stream
+        id: stream
+        env:
+          MANUAL_STREAM: ${{ inputs.stream_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            stream="$MANUAL_STREAM"
+          else
+            case "$(date -u +%H)" in
+              05) stream="woodworking_core" ;;
+              09) stream="power_tools" ;;
+              13) stream="three_d_printing" ;;
+              17) stream="deals_for_dudes" ;;
+              *)
+                echo "::error::No stream is mapped to the current UTC hour."
+                exit 1
+                ;;
+            esac
+          fi
+
+          echo "name=$stream" >> "$GITHUB_OUTPUT"
+          echo "Selected stream: $stream"
+
+      - name: Run discovery
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
+          STREAM_NAME: ${{ steps.stream.outputs.name }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$APP_URL" || -z "$AUTOMATION_SECRET" ]]; then
+            echo "::error::Add APP_URL and AUTOMATION_SECRET as repository Actions secrets."
+            exit 1
+          fi
+
+          payload="$(printf '{"streamName":"%s"}' "$STREAM_NAME")"
+
+          curl_args=(
+            --fail-with-body
+            --silent
+            --show-error
+            --retry 2
+            --retry-all-errors
+            --connect-timeout 15
+            --max-time 180
+            --request POST
+            --header "Authorization: Bearer $AUTOMATION_SECRET"
+            --header "Content-Type: application/json"
+            --data "$payload"
+          )
+
+          curl "${curl_args[@]}" "${APP_URL%/}/api/automation/run-stream"
+
+          echo
+          echo "Keepa discovery completed for $STREAM_NAME."
