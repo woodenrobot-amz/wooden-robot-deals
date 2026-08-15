@@ -6,6 +6,7 @@ import {
   getKeepaBestPrice,
   getKeepaImageUrl,
   getKeepaLandedPrice,
+  getKeepaDemand,
   getKeepaProductsByAsins,
 } from "@/lib/keepa/product";
 import { scoreDeal } from "@/lib/scoring";
@@ -223,6 +224,7 @@ export async function enrichCandidateQueue(requestedLimit?: number) {
     const imageUrl = amazonItem?.imageUrl || getKeepaImageUrl(product);
     const keepaPrices = getKeepaBestPrice(product);
     const keepaLanded = getKeepaLandedPrice(product);
+    const keepaDemand = getKeepaDemand(product);
     const currentPrice = amazonItem?.currentPrice || keepaPrices.currentPrice;
     const avg90Price = keepaPrices.avg90Price;
     const estimatedShipping =
@@ -255,8 +257,8 @@ export async function enrichCandidateQueue(requestedLimit?: number) {
       brandBonus,
       currentPrice,
       avg90Price,
-      rating: product.rating ? product.rating / 10 : null,
-      reviewCount: product.reviewCount || null,
+      rating: keepaDemand.rating,
+      reviewCount: keepaDemand.reviewCount,
       salesRank: Number.isFinite(salesRank) && salesRank > 0 ? salesRank : null,
       hasImage: Boolean(imageUrl),
       hasTitle: Boolean(title),
@@ -297,8 +299,8 @@ export async function enrichCandidateQueue(requestedLimit?: number) {
       effective_discount_percent: effectiveDiscountPercent,
       brand_tier: brandTier,
       brand_bonus: brandBonus,
-      rating: product.rating ? product.rating / 10 : null,
-      review_count: product.reviewCount || null,
+      rating: keepaDemand.rating,
+      review_count: keepaDemand.reviewCount,
       sales_rank:
         Number.isFinite(salesRank) && salesRank > 0 ? salesRank : null,
       parent_asin: amazonItem?.parentAsin || product.parentAsin || null,
