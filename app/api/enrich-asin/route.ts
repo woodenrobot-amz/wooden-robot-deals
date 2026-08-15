@@ -6,6 +6,7 @@ import { getPaapiProductByAsin } from "@/lib/paapi";
 import {
   getKeepaBestPrice,
   getKeepaImageUrl,
+  getKeepaDemand,
   getKeepaProductByAsin,
 } from "@/lib/keepa/product";
 
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
     const image_url = paapiProduct?.imageUrl || getKeepaImageUrl(product);
 
     const keepaPrices = getKeepaBestPrice(product);
+    const keepaDemand = getKeepaDemand(product);
     const currentPrice = paapiProduct?.currentPrice || keepaPrices.currentPrice;
     const avg90Price = keepaPrices.avg90Price;
 
@@ -61,8 +63,8 @@ export async function POST(request: Request) {
       brandBonus,
       currentPrice,
       avg90Price,
-      rating: product.rating ? product.rating / 10 : null,
-      reviewCount: product.reviewCount || null,
+      rating: keepaDemand.rating,
+      reviewCount: keepaDemand.reviewCount,
       salesRank: product.salesRanks?.[0] || null,
       hasImage: Boolean(image_url),
       hasTitle: Boolean(title),
@@ -87,6 +89,8 @@ export async function POST(request: Request) {
       scoring_components: scoring.components,
       brand_tier: brandTier,
       brand_bonus: brandBonus,
+      rating: keepaDemand.rating,
+      review_count: keepaDemand.reviewCount,
     });
   } catch (error) {
     console.error("enrich-asin failed:", error);
