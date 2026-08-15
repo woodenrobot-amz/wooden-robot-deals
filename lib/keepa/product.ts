@@ -8,8 +8,6 @@ export type KeepaProduct = {
     current?: unknown[];
     avg90?: unknown[];
   };
-  rating?: number;
-  reviewCount?: number;
   salesRanks?: number[];
   parentAsin?: string;
 };
@@ -51,6 +49,21 @@ export function getKeepaImageUrl(product: KeepaProduct) {
   }
 
   return "";
+}
+
+export function getKeepaDemand(product: KeepaProduct) {
+  const current = product?.stats?.current || [];
+  const rawRating = Number(current[16]);
+  const rawReviewCount = Number(current[17]);
+
+  return {
+    rating:
+      Number.isFinite(rawRating) && rawRating > 0 ? rawRating / 10 : null,
+    reviewCount:
+      Number.isFinite(rawReviewCount) && rawReviewCount > 0
+        ? Math.trunc(rawReviewCount)
+        : null,
+  };
 }
 
 export function getKeepaLandedPrice(product: KeepaProduct) {
@@ -113,6 +126,8 @@ export async function getKeepaProductsByAsins(asins: string[]) {
   keepaUrl.searchParams.set("domain", String(KEEPA_DOMAIN_US));
   keepaUrl.searchParams.set("asin", cleanAsins.join(","));
   keepaUrl.searchParams.set("stats", "90");
+  keepaUrl.searchParams.set("rating", "1");
+  keepaUrl.searchParams.set("history", "0");
 
   const response = await fetch(keepaUrl.toString(), {
     headers: {
