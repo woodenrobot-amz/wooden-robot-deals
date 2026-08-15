@@ -39,7 +39,7 @@ type Enrichment = {
   effective_discount_percent?: number | null;
 };
 
-type Candidate = {
+export type Candidate = {
   asin: string;
   stream_id: string;
   category_id: string | null;
@@ -48,7 +48,9 @@ type Candidate = {
   raw_data: { enrichment?: Enrichment } | null;
 };
 
-type ReviewAction = "publish" | "reject" | "ignore";
+type ReviewAction = "publish" | "defer" | "block";
+
+const PAGE_SIZE = 50;
 
 function money(value: number | null | undefined) {
   return value == null ? "—" : `$${value.toFixed(2)}`;
@@ -72,6 +74,7 @@ export function CandidateReviewList({
   const [decision, setDecision] = useState("pending");
   const [busyKey, setBusyKey] = useState("");
   const [message, setMessage] = useState("");
+  const [page, setPage] = useState(1);
 
   const categories = useMemo(
     () =>
@@ -107,6 +110,12 @@ export function CandidateReviewList({
             (left.raw_data?.enrichment?.deal_score || 0),
         ),
     [candidates, category, decision, minScore, search],
+  );
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedCandidates = visible.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
   );
 
   async function review(candidate: Candidate, action: ReviewAction) {
@@ -148,9 +157,9 @@ export function CandidateReviewList({
     setMessage(
       action === "publish"
         ? `${candidate.asin} is now live.`
-        : action === "ignore"
-          ? `${candidate.asin} ignored permanently.`
-          : `${candidate.asin} rejected.`,
+        : action === "block"
+          ? `${candidate.asin} will never be published.`
+          : `${candidate.asin} deferred for seven days.`,
     );
     setBusyKey("");
   }
@@ -160,13 +169,13 @@ export function CandidateReviewList({
       <div className="grid gap-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-4 lg:grid-cols-5">
         <input
           value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          onChange={(event) => { setSearch(event.target.value); setPage(1); }}
           placeholder="Search title, brand, ASIN"
           className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm outline-none lg:col-span-2"
         />
         <select
           value={category}
-          onChange={(event) => setCategory(event.target.value)}
+          onChange={(event) => { setCategory(event.target.value); setPage(1); }}
           className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
         >
           <option value="all">All categories</option>
@@ -176,7 +185,7 @@ export function CandidateReviewList({
         </select>
         <select
           value={minScore}
-          onChange={(event) => setMinScore(Number(event.target.value))}
+          onChange={(event) => { setMinScore(Number(event.target.value)); setPage(1); }}
           className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
         >
           <option value={0}>All scores</option>
@@ -186,7 +195,7 @@ export function CandidateReviewList({
         </select>
         <select
           value={decision}
-          onChange={(event) => setDecision(event.target.value)}
+          onChange={(event) => { setDecision(event.target.value); setPage(1); }}
           className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm"
         >
           <option value="pending">Pending review</option>
@@ -196,12 +205,16 @@ export function CandidateReviewList({
       </div>
 
       <div className="mt-3 flex items-center justify-between text-sm text-zinc-400">
-        <span>Showing {visible.length} of {candidates.length} review candidates</span>
+        <span>
+          Showing {visible.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1}–
+          {Math.min(currentPage * PAGE_SIZE, visible.length)} of {visible.length} matches
+          ({candidates.length} total)
+        </span>
         {message && <span className="text-amber-300">{message}</span>}
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        {visible.map((candidate) => {
+        {pagedCandidates.map((candidate) => {
           const deal = candidate.raw_data?.enrichment;
           if (!deal) return null;
           const key = `${candidate.stream_id}:${candidate.asin}`;
@@ -332,18 +345,18 @@ export function CandidateReviewList({
                     {busyKey === key ? "Working..." : "Publish"}
                   </button>
                   <button
-                    onClick={() => review(candidate, "reject")}
+                    onClick={() => review(candidate, "defer")}
                     disabled={Boolean(busyKey)}
                     className="rounded-xl bg-zinc-700 px-3 py-2 text-sm font-bold disabled:opacity-50"
                   >
-                    Reject
+                    Not Now · 7d
                   </button>
                   <button
-                    onClick={() => review(candidate, "ignore")}
+                    onClick={() => review(candidate, "block")}
                     disabled={Boolean(busyKey)}
                     className="rounded-xl bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300 disabled:opacity-50"
                   >
-                    Ignore
+                    Never Publish
                   </button>
                 </div>
               ) : candidate.is_live ? (
@@ -363,6 +376,28 @@ export function CandidateReviewList({
           );
         })}
       </div>
+
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <button
+            onClick={() => setPage((value) => Math.max(1, value - 1))}
+            disabled={currentPage === 1}
+            className="rounded-xl bg-zinc-800 px-4 py-2 text-sm font-bold disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span className="text-sm text-zinc-400">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+            disabled={currentPage === totalPages}
+            className="rounded-xl bg-zinc-800 px-4 py-2 text-sm font-bold disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      )}
 
       {visible.length === 0 && (
         <p className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-center text-zinc-500">

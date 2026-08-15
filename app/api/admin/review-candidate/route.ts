@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-type ReviewAction = "publish" | "reject" | "ignore";
+const DEFER_DAYS = 7;
+
+type ReviewAction = "publish" | "defer" | "block";
 
 function isAction(value: unknown): value is ReviewAction {
-  return value === "publish" || value === "reject" || value === "ignore";
+  return value === "publish" || value === "defer" || value === "block";
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -48,7 +50,7 @@ export async function POST(request: Request) {
 
   if (action !== "publish" && candidate.status !== "enriched") {
     return NextResponse.json(
-      { error: "Only pending candidates can be rejected or ignored." },
+      { error: "Only pending candidates can be deferred or blocked." },
       { status: 409 },
     );
   }
@@ -122,29 +124,50 @@ export async function POST(request: Request) {
     }
   }
 
-  if (action === "ignore") {
+  if (action === "block") {
     const { error: ignoreError } = await admin.from("ignored_asins").upsert({
       asin,
       title: enrichment.title || null,
       brand: enrichment.brand || null,
       image_url: enrichment.image_url || null,
-      reason: "Ignored during candidate review",
+      reason: "Marked Never Publish during candidate review",
     });
 
     if (ignoreError) return NextResponse.json({ error: ignoreError.message }, { status: 500 });
   }
 
-  const status = action === "publish" ? "published" : action === "ignore" ? "ignored" : "rejected";
+  const status =
+    action === "publish" ? "published" : action === "block" ? "ignored" : "rejected";
+  const reviewedAt = new Date();
+  const suppressedUntil = new Date(
+    reviewedAt.getTime() + DEFER_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const statusUpdate = admin
+    .from("deal_candidates")
+    .update({ status })
+    .eq("asin", asin);
+  const { error: statusError } =
+    action === "defer" ? await statusUpdate.eq("stream_id", streamId) : await statusUpdate;
+
+  if (statusError) {
+    return NextResponse.json({ error: statusError.message }, { status: 500 });
+  }
+
   const { error: updateError } = await admin
     .from("deal_candidates")
     .update({
       status,
       raw_data: {
         ...rawData,
+        review: {
+          ...toRecord(rawData.review),
+          decision: action,
+          suppressed_until: action === "defer" ? suppressedUntil : null,
+        },
         pipeline: {
           ...toRecord(rawData.pipeline),
           outcome: status,
-          reviewed_at: new Date().toISOString(),
+          reviewed_at: reviewedAt.toISOString(),
           reviewed_by: user.email || user.id,
         },
       },
@@ -154,5 +177,11 @@ export async function POST(request: Request) {
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, asin, action, live: action === "publish" });
+  return NextResponse.json({
+    ok: true,
+    asin,
+    action,
+    live: action === "publish",
+    suppressedUntil: action === "defer" ? suppressedUntil : null,
+  });
 }

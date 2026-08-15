@@ -2,7 +2,22 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CandidateReviewList } from "./candidate-review-list";
+import {
+  CandidateReviewList,
+  type Candidate,
+} from "./candidate-review-list";
+
+const DATABASE_PAGE_SIZE = 1000;
+
+type CandidateRow = Omit<Candidate, "is_live">;
+
+function chunk<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
 
 export default async function CandidateReviewPage() {
   const supabase = await createClient();
@@ -13,46 +28,45 @@ export default async function CandidateReviewPage() {
   if (!user) redirect("/login");
 
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("deal_candidates")
-    .select("asin, stream_id, category_id, status, raw_data")
-    .in("status", ["enriched", "published"])
-    .limit(200);
+  const candidates: CandidateRow[] = [];
+  for (let offset = 0; ; offset += DATABASE_PAGE_SIZE) {
+    const { data, error } = await admin
+      .from("deal_candidates")
+      .select("asin, stream_id, category_id, status, raw_data")
+      .in("status", ["enriched", "published"])
+      .order("created_at", { ascending: true })
+      .range(offset, offset + DATABASE_PAGE_SIZE - 1);
 
-  if (error) throw new Error(`Failed to load review candidates: ${error.message}`);
+    if (error) {
+      throw new Error(`Failed to load review candidates: ${error.message}`);
+    }
 
-  const candidates = data || [];
-  const publishedAsins = [
-    ...new Set(
-      candidates
-        .filter((candidate) => candidate.status === "published")
-        .map((candidate) => candidate.asin),
-    ),
-  ];
-  const { data: liveDeals, error: liveError } =
-    publishedAsins.length > 0
-      ? await admin
-          .from("deals")
-          .select("asin, status, expires_at")
-          .in("asin", publishedAsins)
-      : { data: [], error: null };
-
-  if (liveError) {
-    throw new Error(`Failed to verify published deals: ${liveError.message}`);
+    candidates.push(...((data || []) as CandidateRow[]));
+    if ((data || []).length < DATABASE_PAGE_SIZE) break;
   }
 
-  const now = new Date().toISOString();
+  const candidateAsins = [...new Set(candidates.map((candidate) => candidate.asin))];
+  const liveDeals: { asin: string }[] = [];
+  for (const asinBatch of chunk(candidateAsins, 200)) {
+    const { data, error } = await admin
+      .from("deals")
+      .select("asin")
+      .in("asin", asinBatch)
+      .eq("status", "active")
+      .gt("expires_at", new Date().toISOString());
+
+    if (error) {
+      throw new Error(`Failed to verify published deals: ${error.message}`);
+    }
+    liveDeals.push(...(data || []));
+  }
+
   const liveAsins = new Set(
-    (liveDeals || [])
-      .filter(
-        (deal) =>
-          deal.status === "active" &&
-          String(deal.expires_at) > now,
-      )
-      .map((deal) => deal.asin),
+    liveDeals.map((deal) => deal.asin),
   );
   const reviewCandidates = candidates.map((candidate) => ({
     ...candidate,
+    status: liveAsins.has(candidate.asin) ? ("published" as const) : candidate.status,
     is_live: liveAsins.has(candidate.asin),
   }));
 
