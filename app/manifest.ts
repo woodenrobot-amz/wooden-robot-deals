@@ -13,6 +13,21 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#09090b",
     theme_color: "#09090b",
     categories: ["shopping", "lifestyle"],
+    shortcuts: [
+      {
+        name: "Deal Schedule",
+        short_name: "Schedule",
+        description: "Open the daily posting schedule.",
+        url: "/admin/deal-schedule",
+        icons: [
+          {
+            src: "/icons/icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+          },
+        ],
+      },
+    ],
     icons: [
       {
         src: "/icons/icon-192.png",

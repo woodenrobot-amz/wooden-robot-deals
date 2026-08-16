@@ -4,6 +4,11 @@ import { createClient } from "@/lib/supabase/server";
 
 const adminLinks = [
   {
+    href: "/admin/deal-schedule",
+    title: "Deal Schedule",
+    description: "Plan daily posts by hour and copy post or comment text fast.",
+  },
+  {
     href: "/admin/add-deal",
     title: "Add Deal",
     description: "Fetch an ASIN, preview scoring, and save a deal.",
