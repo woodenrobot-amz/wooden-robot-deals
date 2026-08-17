@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DealScheduleBoard } from "./deal-schedule-board";
+import { UnplannedPostTracker } from "./unplanned-post-tracker";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { dateInEasternTime, isScheduleDate } from "@/lib/deal-schedule";
@@ -9,7 +10,7 @@ import { isAdminSurface } from "@/lib/app-surface";
 
 export const metadata: Metadata = {
   title: "Deal Schedule",
-  description: "Plan and copy daily deal posts by group and time.",
+  description: "Plan, copy, and track daily deal posts by group and time.",
   manifest: isAdminSurface
     ? "/manifest.webmanifest"
     : "/admin-schedule.webmanifest",
@@ -53,15 +54,18 @@ export default async function DealSchedulePage({
     throw new Error(`Failed to load the deal schedule: ${itemsResult.error.message}`);
   }
 
+  const groups = groupsResult.data || [];
+
   return (
     <main className="min-h-screen bg-[#090b10] px-3 pb-16 pt-4 text-white sm:px-5 sm:pt-7">
       <div className="mx-auto max-w-7xl">
         <Link href="/admin" className="inline-flex min-h-11 items-center text-sm font-semibold text-amber-300">
           ← Admin
         </Link>
+        <UnplannedPostTracker initialDate={date} groups={groups} />
         <DealScheduleBoard
           initialDate={date}
-          initialGroups={groupsResult.data || []}
+          initialGroups={groups}
           initialItems={itemsResult.data || []}
         />
       </div>
