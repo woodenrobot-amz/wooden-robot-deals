@@ -530,6 +530,10 @@ export function DealScheduleBoard({
                   </span>
                   <textarea
                     value={draft.postBody}
+                    lang="en-US"
+                    spellCheck={true}
+                    autoCorrect="on"
+                    autoCapitalize="sentences"
                     onChange={(event) => updateDraft(activeGroup.id, hour, { postBody: event.target.value })}
                     onKeyDown={(event) => {
                       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveSlot(activeGroup.id, hour);
@@ -543,6 +547,10 @@ export function DealScheduleBoard({
                   <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Comment</span>
                   <textarea
                     value={draft.commentText}
+                    lang="en-US"
+                    spellCheck={true}
+                    autoCorrect="on"
+                    autoCapitalize="sentences"
                     onChange={(event) => updateDraft(activeGroup.id, hour, { commentText: event.target.value })}
                     onKeyDown={(event) => {
                       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveSlot(activeGroup.id, hour);
