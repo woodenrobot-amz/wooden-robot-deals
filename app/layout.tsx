@@ -63,10 +63,21 @@ const adminMetadata: Metadata = {
     title: "Posting Desk",
   },
   icons: {
-    icon: [{ url: "/icons/admin-icon.svg", type: "image/svg+xml" }],
+    icon: [
+      {
+        url: "/icons/admin-icon-192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        url: "/icons/admin-icon-512.png",
+        sizes: "512x512",
+        type: "image/png",
+      },
+    ],
     apple: [
       {
-        url: "/icons/apple-touch-icon.png",
+        url: "/icons/admin-apple-touch-icon.png",
         sizes: "180x180",
         type: "image/png",
       },
