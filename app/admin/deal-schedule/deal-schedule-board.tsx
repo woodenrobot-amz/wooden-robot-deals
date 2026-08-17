@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   dateInEasternTime,
   formatScheduleHour,
+  recurringDailySlot,
   SCHEDULE_HOURS,
   type PostingGroup,
   type ScheduleDay,
@@ -39,8 +40,18 @@ function keyFor(groupId: string, hour: number) {
   return `${groupId}:${hour}`;
 }
 
-function draftFromItem(item?: ScheduleItem): Draft {
-  if (!item) return { ...EMPTY_DRAFT };
+function draftFromItem(item?: ScheduleItem, group?: PostingGroup, hour?: number): Draft {
+  if (!item) {
+    const recurring = group && hour !== undefined ? recurringDailySlot(group.slug, hour) : null;
+    return recurring
+      ? {
+          postBody: recurring.postBody,
+          commentText: recurring.commentText,
+          asin: "",
+          status: "planned",
+        }
+      : { ...EMPTY_DRAFT };
+  }
   return {
     postBody: item.post_body,
     commentText: item.comment_text,
@@ -49,8 +60,13 @@ function draftFromItem(item?: ScheduleItem): Draft {
   };
 }
 
-function itemMatchesDraft(item: ScheduleItem | undefined, draft: Draft) {
-  const saved = draftFromItem(item);
+function itemMatchesDraft(
+  item: ScheduleItem | undefined,
+  draft: Draft,
+  group?: PostingGroup,
+  hour?: number,
+) {
+  const saved = draftFromItem(item, group, hour);
   return (
     saved.postBody === draft.postBody &&
     saved.commentText === draft.commentText &&
@@ -83,10 +99,20 @@ function draftsFor(items: ScheduleItem[], groups: PostingGroup[]) {
         items.find(
           (item) => item.posting_group_id === group.id && item.schedule_hour === hour,
         ),
+        group,
+        hour,
       );
     }
   }
   return next;
+}
+
+function PostCharacterCount({ length }: { length: number }) {
+  return (
+    <span className="text-xs font-semibold tabular-nums text-zinc-500" aria-label={`${length} of 130 characters`}>
+      <span className={length > 130 ? "text-red-400" : undefined}>{length}</span>/130
+    </span>
+  );
 }
 
 async function copyText(value: string) {
@@ -122,6 +148,7 @@ export function DealScheduleBoard({
   const [loading, setLoading] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [expandedPostedKeys, setExpandedPostedKeys] = useState<Set<string>>(() => new Set());
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
@@ -138,9 +165,10 @@ export function DealScheduleBoard({
     () => items.filter((item) => item.posting_group_id === activeGroup?.id),
     [activeGroup?.id, items],
   );
-  const scheduledCount = activeItems.filter(
-    (item) => item.post_body || item.comment_text || item.asin,
-  ).length;
+  const scheduledCount = SCHEDULE_HOURS.filter((hour) => {
+    const draft = drafts[keyFor(activeGroup.id, hour)] || EMPTY_DRAFT;
+    return draft.postBody || draft.commentText || draft.asin;
+  }).length;
   const postedCount = activeItems.filter((item) => item.status === "posted").length;
   const hasUnsavedChanges = Object.entries(drafts).some(([key, draft]) => {
     const [groupId, hour] = key.split(":");
@@ -148,7 +176,8 @@ export function DealScheduleBoard({
       (candidate) =>
         candidate.posting_group_id === groupId && candidate.schedule_hour === Number(hour),
     );
-    return !itemMatchesDraft(item, draft);
+    const group = groups.find((candidate) => candidate.id === groupId);
+    return !itemMatchesDraft(item, draft, group, Number(hour));
   });
 
   useEffect(() => {
@@ -187,6 +216,7 @@ export function DealScheduleBoard({
       setGroups(data.groups);
       setItems(data.items);
       setDrafts(draftsFor(data.items, data.groups));
+      setExpandedPostedKeys(new Set());
       if (!data.groups.some((group) => group.id === activeGroupId)) {
         setActiveGroupId(data.groups[0]?.id || "");
       }
@@ -231,6 +261,13 @@ export function DealScheduleBoard({
         ...current,
         [key]: data.item ? draftFromItem(data.item) : { ...EMPTY_DRAFT },
       }));
+      if (status === "posted" && mode === "copy") {
+        setExpandedPostedKeys((current) => {
+          const next = new Set(current);
+          next.delete(key);
+          return next;
+        });
+      }
       setNotice(data.item ? `${formatScheduleHour(hour)} saved.` : `${formatScheduleHour(hour)} cleared.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not save this time slot.");
@@ -370,9 +407,11 @@ export function DealScheduleBoard({
             (candidate) => candidate.posting_group_id === activeGroup.id && candidate.schedule_hour === hour,
           );
           const draft = drafts[key] || EMPTY_DRAFT;
-          const dirty = !itemMatchesDraft(item, draft);
+          const dirty = !itemMatchesDraft(item, draft, activeGroup, hour);
           const filled = Boolean(draft.postBody || draft.commentText || draft.asin);
           const posted = draft.status === "posted";
+          const recurring = recurringDailySlot(activeGroup.slug, hour);
+          const collapsed = mode === "copy" && posted && !expandedPostedKeys.has(key);
 
           if (mode === "copy") {
             return (
@@ -382,18 +421,41 @@ export function DealScheduleBoard({
                   posted ? "border-emerald-400/40" : filled ? "border-zinc-700" : "border-zinc-800"
                 }`}
               >
-                <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
+                <div className={`flex items-center justify-between px-4 py-3 ${collapsed ? "" : "border-b border-zinc-800"}`}>
                   <div className="flex items-center gap-3">
                     <span className="text-lg font-black tabular-nums text-white">{formatScheduleHour(hour)}</span>
+                    {recurring && <span className="text-xs font-bold text-amber-300">{recurring.label}</span>}
                     {posted && <span className="rounded-full bg-emerald-400/15 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-300">Posted</span>}
                   </div>
-                  {draft.asin && <span className="font-mono text-xs text-zinc-500">{draft.asin}</span>}
+                  <div className="flex items-center gap-3">
+                    {draft.asin && <span className="font-mono text-xs text-zinc-500">{draft.asin}</span>}
+                    {posted && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedPostedKeys((current) => {
+                          const next = new Set(current);
+                          if (collapsed) {
+                            next.add(key);
+                          } else {
+                            next.delete(key);
+                          }
+                          return next;
+                        })}
+                        className="min-h-11 rounded-lg bg-zinc-800 px-3 text-xs font-bold text-zinc-200"
+                      >
+                        {collapsed ? "Show" : "Collapse"}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {filled ? (
+                {!collapsed && (filled ? (
                   <div className="grid gap-3 p-3 md:grid-cols-2">
                     <div className="min-w-0 rounded-xl bg-zinc-950/70 p-3">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Post body</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Post body</span>
+                          <PostCharacterCount length={draft.postBody.length} />
+                        </div>
                         <button
                           type="button"
                           onClick={() => handleCopy(draft.postBody, `${key}:post`)}
@@ -432,7 +494,7 @@ export function DealScheduleBoard({
                   </div>
                 ) : (
                   <p className="px-4 py-5 text-sm text-zinc-600">Open edit mode to schedule this hour.</p>
-                )}
+                ))}
               </article>
             );
           }
@@ -448,6 +510,7 @@ export function DealScheduleBoard({
                 <div className="flex items-center justify-between gap-3 xl:block">
                   <div>
                     <p className="text-xl font-black tabular-nums">{formatScheduleHour(hour)}</p>
+                    {recurring && <p className="mt-1 text-xs font-bold text-amber-300">{recurring.label}</p>}
                     <p className={`mt-1 text-xs font-bold uppercase tracking-wider ${posted ? "text-emerald-300" : dirty ? "text-amber-300" : "text-zinc-600"}`}>
                       {posted ? "Posted" : dirty ? "Unsaved" : filled ? "Ready" : "Open"}
                     </p>
@@ -461,7 +524,10 @@ export function DealScheduleBoard({
                   />
                 </div>
                 <label className="block">
-                  <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Post body</span>
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Post body</span>
+                    <PostCharacterCount length={draft.postBody.length} />
+                  </span>
                   <textarea
                     value={draft.postBody}
                     onChange={(event) => updateDraft(activeGroup.id, hour, { postBody: event.target.value })}

@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   isScheduleDate,
+  recurringDailySlot,
   SCHEDULE_END_HOUR,
   SCHEDULE_START_HOUR,
   type ScheduleStatus,
@@ -108,7 +109,7 @@ export async function PUT(request: Request) {
   const [groupResult, existingResult] = await Promise.all([
     admin
       .from("deal_posting_groups")
-      .select("id")
+      .select("id, slug")
       .eq("id", postingGroupId)
       .eq("is_active", true)
       .maybeSingle(),
@@ -132,7 +133,9 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "Posting group not found." }, { status: 404 });
   }
 
-  if (!postBody && !commentText && !asin && status === "planned") {
+  const isRecurringSlot = Boolean(recurringDailySlot(groupResult.data.slug, scheduleHour!));
+
+  if (!postBody && !commentText && !asin && status === "planned" && !isRecurringSlot) {
     const { error } = await admin
       .from("deal_schedule_items")
       .delete()
