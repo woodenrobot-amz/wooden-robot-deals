@@ -72,4 +72,25 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
+### Public and admin PWA projects
+
+Deploy this repository as **two separate Vercel projects** so browsers install the
+public Deals experience and the authenticated Posting Desk as distinct PWAs:
+
+1. Create a public project from this repository. Leave `APP_SURFACE` unset (or
+   set it to `public`) in every Vercel environment. Its root URL remains the
+   Wooden Robot Deals feed.
+2. Create a second project from the same repository and branch. Set
+   `APP_SURFACE=admin` in Production, Preview, and Development. Its root URL
+   redirects to `/admin/deal-schedule`, and its root-scoped manifest includes
+   `/login` and `/auth/callback` in the installed application's navigation
+   scope.
+3. Configure the existing Supabase and server-side secrets independently on
+   both projects. Add each project's callback URL to the Supabase authentication
+   redirect allow list; for the admin project that is
+   `https://<admin-domain>/auth/callback`.
+
+Do not assign both projects the same production domain: each origin publishes a
+different root-scoped `/manifest.webmanifest` and service-worker registration.
+
 /data/ignored-asins.json has been deprecated. Moved to Supabase.

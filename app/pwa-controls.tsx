@@ -7,7 +7,6 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
 
-const INSTALL_DISMISSED_KEY = "woodenRobot.installDismissedAt";
 const INSTALL_DISMISS_DAYS = 30;
 
 function isStandalone() {
@@ -18,7 +17,17 @@ function isStandalone() {
   );
 }
 
-export function PwaControls({ version }: { version: string }) {
+export function PwaControls({
+  version,
+  surface,
+}: {
+  version: string;
+  surface: "public" | "admin";
+}) {
+  const installDismissedKey =
+    surface === "admin"
+      ? "woodenRobot.postingDesk.installDismissedAt"
+      : "woodenRobot.installDismissedAt";
   const [installEvent, setInstallEvent] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [showIosInstall, setShowIosInstall] = useState(false);
@@ -27,7 +36,7 @@ export function PwaControls({ version }: { version: string }) {
 
   useEffect(() => {
     const dismissedAt = Number(
-      window.localStorage.getItem(INSTALL_DISMISSED_KEY) || 0,
+      window.localStorage.getItem(installDismissedKey) || 0,
     );
     const canPrompt =
       Date.now() - dismissedAt >
@@ -94,10 +103,10 @@ export function PwaControls({ version }: { version: string }) {
       window.removeEventListener("offline", handleOffline);
       window.clearInterval(timer);
     };
-  }, [version]);
+  }, [installDismissedKey, version]);
 
   function dismissInstall() {
-    window.localStorage.setItem(INSTALL_DISMISSED_KEY, String(Date.now()));
+    window.localStorage.setItem(installDismissedKey, String(Date.now()));
     setInstallEvent(null);
     setShowIosInstall(false);
   }
@@ -136,11 +145,15 @@ export function PwaControls({ version }: { version: string }) {
 
       {!updateAvailable && (installEvent || showIosInstall) && (
         <div className="fixed inset-x-3 bottom-3 z-40 mx-auto max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl">
-          <div className="font-bold text-white">Install Wooden Robot</div>
+          <div className="font-bold text-white">
+            Install {surface === "admin" ? "Posting Desk" : "Wooden Robot"}
+          </div>
           <div className="mt-1 text-sm text-zinc-400">
             {showIosInstall
               ? "Tap Share, then Add to Home Screen."
-              : "Keep the deals feed one tap away."}
+              : surface === "admin"
+                ? "Keep the posting desk one tap away."
+                : "Keep the deals feed one tap away."}
           </div>
           <div className="mt-3 flex gap-2">
             {installEvent && (

@@ -1,19 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import { PwaControls } from "./pwa-controls";
+import { isAdminSurface } from "@/lib/app-surface";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
+const publicMetadata: Metadata = {
   title: {
     default: "Wooden Robot Deals",
     template: "%s | Wooden Robot",
@@ -59,6 +49,35 @@ export const metadata: Metadata = {
   },
 };
 
+const adminMetadata: Metadata = {
+  title: {
+    default: "Wooden Robot Posting Desk",
+    template: "%s | Wooden Robot Posting Desk",
+  },
+  description: "Plan daily deals and copy post or comment text fast.",
+  applicationName: "Wooden Robot Posting Desk",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Posting Desk",
+  },
+  icons: {
+    icon: [{ url: "/icons/admin-icon.svg", type: "image/svg+xml" }],
+    apple: [
+      {
+        url: "/icons/apple-touch-icon.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
+  },
+};
+
+export const metadata: Metadata = isAdminSurface
+  ? adminMetadata
+  : publicMetadata;
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -80,11 +99,14 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
       <body className="min-h-full flex flex-col">
         {children}
-        <PwaControls version={version} />
+        <PwaControls
+          version={version}
+          surface={isAdminSurface ? "admin" : "public"}
+        />
       </body>
     </html>
   );

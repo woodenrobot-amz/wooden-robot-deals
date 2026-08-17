@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Wooden Robot Posting Desk</title>
+  <desc id="description">A clipboard with a purple send arrow</desc>
+  <rect width="512" height="512" fill="#090b10"/>
+  <rect x="41" y="41" width="430" height="430" rx="92" fill="#18111f" stroke="#fbbf24" stroke-width="13"/>
+  <rect x="128" y="113" width="256" height="292" rx="31" fill="#f4f4f5"/>
+  <rect x="195" y="77" width="122" height="72" rx="20" fill="#fbbf24"/>
+  <g fill="#3f3f46">
+    <rect x="169" y="200" width="174" height="18" rx="7"/>
+    <rect x="169" y="251" width="143" height="18" rx="7"/>
+    <rect x="169" y="302" width="174" height="18" rx="7"/>
+  </g>
+  <path d="m205 353 143-41-46 72-31-36z" fill="#7c3aed"/>
+</svg>

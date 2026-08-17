@@ -1,10 +1,10 @@
-const CACHE_NAME = "wooden-robot-shell-v1";
+const CACHE_NAME = "wooden-robot-shell-v2";
 const APP_SHELL = [
-  "/",
   "/offline.html",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
+  "/icons/admin-icon.svg",
 ];
 
 self.addEventListener("install", (event) => {

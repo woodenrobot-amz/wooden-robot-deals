@@ -5,11 +5,14 @@ import { DealScheduleBoard } from "./deal-schedule-board";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { dateInEasternTime, isScheduleDate } from "@/lib/deal-schedule";
+import { isAdminSurface } from "@/lib/app-surface";
 
 export const metadata: Metadata = {
   title: "Deal Schedule",
   description: "Plan and copy daily deal posts by group and time.",
-  manifest: "/admin-schedule.webmanifest",
+  manifest: isAdminSurface
+    ? "/manifest.webmanifest"
+    : "/admin-schedule.webmanifest",
 };
 
 export default async function DealSchedulePage({
