@@ -62,7 +62,7 @@ export default async function DealSchedulePage({
         <Link href="/admin" className="inline-flex min-h-11 items-center text-sm font-semibold text-amber-300">
           ← Admin
         </Link>
-        <UnplannedPostTracker initialDate={date} groups={groups} />
+        <UnplannedPostTracker />
         <DealScheduleBoard
           initialDate={date}
           initialGroups={groups}
