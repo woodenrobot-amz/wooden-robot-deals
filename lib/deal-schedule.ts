@@ -5,6 +5,16 @@ export const SCHEDULE_HOURS = Array.from(
   (_, index) => SCHEDULE_START_HOUR + index,
 );
 
+export const RECURRING_DAILY_SLOTS = {
+  woodworkingLightningDeal: {
+    groupSlug: "woodworking",
+    hour: 15,
+    label: "Lightning deal",
+    postBody: "",
+    commentText: "Here's the list!\n#ad https://amzlink.to/az0PcMReHRer7",
+  },
+} as const;
+
 export type PostingGroup = {
   id: string;
   name: string;
@@ -53,4 +63,9 @@ export function dateInEasternTime(date = new Date()) {
 export function formatScheduleHour(hour: number) {
   if (hour === 12) return "12 PM";
   return hour > 12 ? `${hour - 12} PM` : `${hour} AM`;
+}
+
+export function recurringDailySlot(groupSlug: string, hour: number) {
+  const slot = RECURRING_DAILY_SLOTS.woodworkingLightningDeal;
+  return groupSlug === slot.groupSlug && hour === slot.hour ? slot : null;
 }
