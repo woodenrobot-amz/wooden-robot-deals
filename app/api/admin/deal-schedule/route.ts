@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getAmazonItems, type AmazonPublicItem } from "@/lib/amazon-creators";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -18,6 +19,55 @@ async function authenticatedUser() {
     data: { user },
   } = await supabase.auth.getUser();
   return user;
+}
+
+type PostSnapshot = Pick<
+  AmazonPublicItem,
+  "parentAsin" | "title" | "currentPrice" | "affiliateUrl"
+>;
+
+async function getPostSnapshot(
+  admin: ReturnType<typeof createAdminClient>,
+  asin: string | null,
+): Promise<PostSnapshot | null> {
+  if (!asin) return null;
+
+  const { data: savedDeal } = await admin
+    .from("deals")
+    .select("title, current_price, amazon_url")
+    .eq("asin", asin)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (savedDeal?.current_price != null) {
+    return {
+      parentAsin: null,
+      title: savedDeal.title || null,
+      currentPrice: Number(savedDeal.current_price),
+      affiliateUrl: savedDeal.amazon_url || `https://www.amazon.com/dp/${asin}`,
+    };
+  }
+
+  try {
+    const [amazonItem] = await getAmazonItems([asin]);
+    if (amazonItem) return amazonItem;
+  } catch (error) {
+    console.warn("Could not enrich deal post event", {
+      asin,
+      error: error instanceof Error ? error.message : "Unknown Amazon API error",
+    });
+  }
+
+  return savedDeal
+    ? {
+        parentAsin: null,
+        title: savedDeal.title || null,
+        currentPrice:
+          savedDeal.current_price == null ? null : Number(savedDeal.current_price),
+        affiliateUrl: savedDeal.amazon_url || `https://www.amazon.com/dp/${asin}`,
+      }
+    : null;
 }
 
 export async function GET(request: Request) {
@@ -115,7 +165,7 @@ export async function PUT(request: Request) {
       .maybeSingle(),
     admin
       .from("deal_schedule_items")
-      .select("posted_at")
+      .select("id, status, posted_at")
       .eq("user_id", user.id)
       .eq("posting_group_id", postingGroupId)
       .eq("schedule_date", scheduleDate)
@@ -171,5 +221,68 @@ export async function PUT(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const wasPosted = existingResult.data?.status === "posted";
+
+  if (status === "posted" && !wasPosted) {
+    const snapshot = await getPostSnapshot(admin, asin);
+    const { error: eventError } = await admin.from("deal_post_events").insert({
+      user_id: user.id,
+      schedule_item_id: item.id,
+      posting_group_id: postingGroupId,
+      schedule_date: scheduleDate,
+      schedule_hour: scheduleHour,
+      asin,
+      parent_asin: snapshot?.parentAsin || null,
+      product_title: snapshot?.title || null,
+      price_at_posting: snapshot?.currentPrice ?? null,
+      currency_code: snapshot?.currentPrice != null ? "USD" : null,
+      affiliate_url: snapshot?.affiliateUrl || null,
+      post_body: postBody,
+      comment_text: commentText,
+      posted_at: item.posted_at || now,
+    });
+
+    if (eventError && eventError.code !== "23505") {
+      await admin
+        .from("deal_schedule_items")
+        .update({ status: "planned", posted_at: null, updated_at: now })
+        .eq("id", item.id)
+        .eq("user_id", user.id);
+      return NextResponse.json(
+        { error: `Could not record the posting history: ${eventError.message}` },
+        { status: 500 },
+      );
+    }
+  }
+
+  if (status === "planned" && wasPosted && existingResult.data?.id) {
+    const { error: voidError } = await admin
+      .from("deal_post_events")
+      .update({
+        voided_at: now,
+        void_reason: "Posting status changed back to planned",
+      })
+      .eq("user_id", user.id)
+      .eq("schedule_item_id", existingResult.data.id)
+      .is("voided_at", null);
+
+    if (voidError) {
+      await admin
+        .from("deal_schedule_items")
+        .update({
+          status: "posted",
+          posted_at: existingResult.data.posted_at,
+          updated_at: now,
+        })
+        .eq("id", existingResult.data.id)
+        .eq("user_id", user.id);
+      return NextResponse.json(
+        { error: `Could not void the posting history: ${voidError.message}` },
+        { status: 500 },
+      );
+    }
+  }
+
   return NextResponse.json({ item });
 }
