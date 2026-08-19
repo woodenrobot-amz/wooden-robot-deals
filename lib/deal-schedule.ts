@@ -25,6 +25,13 @@ export type PostingGroup = {
 
 export type ScheduleStatus = "planned" | "posted";
 
+export type ScheduleComment = {
+  id?: string;
+  position: number;
+  comment_text: string;
+  asin: string | null;
+};
+
 export type ScheduleItem = {
   id: string;
   posting_group_id: string;
@@ -36,6 +43,7 @@ export type ScheduleItem = {
   status: ScheduleStatus;
   posted_at: string | null;
   updated_at: string;
+  deal_schedule_comments?: ScheduleComment[];
 };
 
 export type ScheduleDay = {
