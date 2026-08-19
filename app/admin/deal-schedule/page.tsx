@@ -11,9 +11,7 @@ import { isAdminSurface } from "@/lib/app-surface";
 export const metadata: Metadata = {
   title: "Deal Schedule",
   description: "Plan, copy, and track daily deal posts by group and time.",
-  manifest: isAdminSurface
-    ? "/manifest.webmanifest"
-    : "/admin-schedule.webmanifest",
+  manifest: isAdminSurface ? "/manifest.webmanifest" : "/admin-schedule.webmanifest",
 };
 
 export default async function DealSchedulePage({
@@ -22,9 +20,7 @@ export default async function DealSchedulePage({
   searchParams: Promise<{ date?: string }>;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const requestedDate = (await searchParams).date;
@@ -40,21 +36,21 @@ export default async function DealSchedulePage({
     admin
       .from("deal_schedule_items")
       .select(
-        "id, posting_group_id, schedule_date, schedule_hour, post_body, comment_text, asin, status, posted_at, updated_at",
+        "id, posting_group_id, schedule_date, schedule_hour, post_body, comment_text, asin, status, posted_at, updated_at, deal_schedule_comments(id, position, comment_text, asin)",
       )
       .eq("user_id", user.id)
       .eq("schedule_date", date)
       .order("schedule_hour"),
   ]);
 
-  if (groupsResult.error) {
-    throw new Error(`Failed to load posting groups: ${groupsResult.error.message}`);
-  }
-  if (itemsResult.error) {
-    throw new Error(`Failed to load the deal schedule: ${itemsResult.error.message}`);
-  }
+  if (groupsResult.error) throw new Error(`Failed to load posting groups: ${groupsResult.error.message}`);
+  if (itemsResult.error) throw new Error(`Failed to load the deal schedule: ${itemsResult.error.message}`);
 
   const groups = groupsResult.data || [];
+  const items = (itemsResult.data || []).map((item) => ({
+    ...item,
+    deal_schedule_comments: [...(item.deal_schedule_comments || [])].sort((a, b) => a.position - b.position),
+  }));
 
   return (
     <main className="min-h-screen bg-[#090b10] px-3 pb-16 pt-4 text-white sm:px-5 sm:pt-7">
@@ -63,11 +59,7 @@ export default async function DealSchedulePage({
           ← Admin
         </Link>
         <UnplannedPostTracker />
-        <DealScheduleBoard
-          initialDate={date}
-          initialGroups={groups}
-          initialItems={itemsResult.data || []}
-        />
+        <DealScheduleBoard initialDate={date} initialGroups={groups} initialItems={items} />
       </div>
     </main>
   );
