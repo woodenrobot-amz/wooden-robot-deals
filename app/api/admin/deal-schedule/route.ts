@@ -13,6 +13,7 @@ import {
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ASIN_PATTERN = /^[A-Z0-9]{10}$/;
 const MAX_COMMENTS = 5;
+const MAX_SEQUENTIAL_DEALS = 100;
 
 async function authenticatedUser() {
   const supabase = await createClient();
@@ -108,18 +109,18 @@ export async function GET(request: Request) {
   const [groupsResult, itemsResult] = await Promise.all([
     admin
       .from("deal_posting_groups")
-      .select("id, name, slug, accent, sort_order")
+      .select("id, name, slug, accent, sort_order, schedule_type, tracks_post_events")
       .eq("is_active", true)
       .order("sort_order")
       .order("name"),
     admin
       .from("deal_schedule_items")
       .select(
-        "id, posting_group_id, schedule_date, schedule_hour, post_body, comment_text, asin, status, posted_at, updated_at, deal_schedule_comments(id, position, comment_text, asin)",
+        "id, posting_group_id, schedule_date, schedule_hour, schedule_position, post_body, comment_text, asin, status, posted_at, updated_at, deal_schedule_comments(id, position, comment_text, asin)",
       )
       .eq("user_id", user.id)
       .eq("schedule_date", date)
-      .order("schedule_hour"),
+      .order("schedule_position"),
   ]);
 
   if (groupsResult.error) return NextResponse.json({ error: groupsResult.error.message }, { status: 500 });
@@ -140,7 +141,8 @@ export async function PUT(request: Request) {
   const body = (await request.json().catch(() => null)) as {
     postingGroupId?: string;
     scheduleDate?: string;
-    scheduleHour?: number;
+    scheduleHour?: number | null;
+    schedulePosition?: number;
     postBody?: string;
     commentText?: string;
     asin?: string | null;
@@ -151,6 +153,7 @@ export async function PUT(request: Request) {
   const postingGroupId = body?.postingGroupId;
   const scheduleDate = body?.scheduleDate;
   const scheduleHour = body?.scheduleHour;
+  const schedulePosition = body?.schedulePosition ?? scheduleHour;
   const postBody = body?.postBody?.trim() ?? "";
   const comments = normalizeComments(body || {});
   const status = body?.status;
@@ -161,8 +164,8 @@ export async function PUT(request: Request) {
   if (!isScheduleDate(scheduleDate)) {
     return NextResponse.json({ error: "Use a valid schedule date." }, { status: 400 });
   }
-  if (!Number.isInteger(scheduleHour) || scheduleHour! < SCHEDULE_START_HOUR || scheduleHour! > SCHEDULE_END_HOUR) {
-    return NextResponse.json({ error: "Schedule hour must be between 7 AM and 7 PM." }, { status: 400 });
+  if (!Number.isInteger(schedulePosition) || schedulePosition! < 1 || schedulePosition! > MAX_SEQUENTIAL_DEALS) {
+    return NextResponse.json({ error: "Choose a valid deal position." }, { status: 400 });
   }
   if (postBody.length > 10000) {
     return NextResponse.json({ error: "Post text must be 10,000 characters or less." }, { status: 400 });
@@ -174,28 +177,42 @@ export async function PUT(request: Request) {
   }
 
   const admin = createAdminClient();
-  const [groupResult, existingResult] = await Promise.all([
-    admin
-      .from("deal_posting_groups")
-      .select("id, slug")
-      .eq("id", postingGroupId)
-      .eq("is_active", true)
-      .maybeSingle(),
-    admin
-      .from("deal_schedule_items")
-      .select("id, status, posted_at")
-      .eq("user_id", user.id)
-      .eq("posting_group_id", postingGroupId)
-      .eq("schedule_date", scheduleDate)
-      .eq("schedule_hour", scheduleHour!)
-      .maybeSingle(),
-  ]);
+  const groupResult = await admin
+    .from("deal_posting_groups")
+    .select("id, slug, schedule_type, tracks_post_events")
+    .eq("id", postingGroupId)
+    .eq("is_active", true)
+    .maybeSingle();
 
   if (groupResult.error) return NextResponse.json({ error: groupResult.error.message }, { status: 500 });
-  if (existingResult.error) return NextResponse.json({ error: existingResult.error.message }, { status: 500 });
   if (!groupResult.data) return NextResponse.json({ error: "Posting group not found." }, { status: 404 });
 
-  const isRecurringSlot = Boolean(recurringDailySlot(groupResult.data.slug, scheduleHour!));
+  const isHourly = groupResult.data.schedule_type === "hourly";
+  if (
+    isHourly &&
+    (!Number.isInteger(scheduleHour) ||
+      scheduleHour! < SCHEDULE_START_HOUR ||
+      scheduleHour! > SCHEDULE_END_HOUR ||
+      schedulePosition !== scheduleHour)
+  ) {
+    return NextResponse.json({ error: "Schedule hour must be between 7 AM and 7 PM." }, { status: 400 });
+  }
+  if (!isHourly && scheduleHour != null) {
+    return NextResponse.json({ error: "Sequential deals cannot include a schedule hour." }, { status: 400 });
+  }
+
+  const existingResult = await admin
+    .from("deal_schedule_items")
+    .select("id, status, posted_at")
+    .eq("user_id", user.id)
+    .eq("posting_group_id", postingGroupId)
+    .eq("schedule_date", scheduleDate)
+    .eq("schedule_position", schedulePosition!)
+    .maybeSingle();
+
+  if (existingResult.error) return NextResponse.json({ error: existingResult.error.message }, { status: 500 });
+
+  const isRecurringSlot = isHourly && Boolean(recurringDailySlot(groupResult.data.slug, scheduleHour!));
   const hasComments = comments.some((comment) => comment.commentText || comment.asin);
 
   if (!postBody && !hasComments && status === "planned" && !isRecurringSlot) {
@@ -205,7 +222,7 @@ export async function PUT(request: Request) {
       .eq("user_id", user.id)
       .eq("posting_group_id", postingGroupId)
       .eq("schedule_date", scheduleDate)
-      .eq("schedule_hour", scheduleHour!);
+      .eq("schedule_position", schedulePosition!);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ item: null });
   }
@@ -219,7 +236,8 @@ export async function PUT(request: Request) {
         user_id: user.id,
         posting_group_id: postingGroupId,
         schedule_date: scheduleDate,
-        schedule_hour: scheduleHour,
+        schedule_hour: isHourly ? scheduleHour : null,
+        schedule_position: schedulePosition,
         post_body: postBody,
         comment_text: firstComment.commentText,
         asin: firstComment.asin,
@@ -227,9 +245,9 @@ export async function PUT(request: Request) {
         posted_at: status === "posted" ? existingResult.data?.posted_at || now : null,
         updated_at: now,
       },
-      { onConflict: "user_id,posting_group_id,schedule_date,schedule_hour" },
+      { onConflict: "user_id,posting_group_id,schedule_date,schedule_position" },
     )
-    .select("id, posting_group_id, schedule_date, schedule_hour, post_body, comment_text, asin, status, posted_at, updated_at")
+    .select("id, posting_group_id, schedule_date, schedule_hour, schedule_position, post_body, comment_text, asin, status, posted_at, updated_at")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -258,7 +276,7 @@ export async function PUT(request: Request) {
 
   const wasPosted = existingResult.data?.status === "posted";
 
-  if (status === "posted" && !wasPosted) {
+  if (status === "posted" && !wasPosted && groupResult.data.tracks_post_events) {
     const firstSnapshot = await getPostSnapshot(admin, firstComment.asin);
     const { data: event, error: eventError } = await admin
       .from("deal_post_events")
@@ -267,7 +285,7 @@ export async function PUT(request: Request) {
         schedule_item_id: item.id,
         posting_group_id: postingGroupId,
         schedule_date: scheduleDate,
-        schedule_hour: scheduleHour,
+        schedule_hour: scheduleHour!,
         asin: firstComment.asin,
         parent_asin: firstSnapshot?.parentAsin || null,
         product_title: firstSnapshot?.title || null,
@@ -308,7 +326,7 @@ export async function PUT(request: Request) {
     }
   }
 
-  if (status === "planned" && wasPosted && existingResult.data?.id) {
+  if (status === "planned" && wasPosted && existingResult.data?.id && groupResult.data.tracks_post_events) {
     const { error: voidError } = await admin
       .from("deal_post_events")
       .update({ voided_at: now, void_reason: "Posting status changed back to planned" })
