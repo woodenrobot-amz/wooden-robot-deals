@@ -29,18 +29,18 @@ export default async function DealSchedulePage({
   const [groupsResult, itemsResult] = await Promise.all([
     admin
       .from("deal_posting_groups")
-      .select("id, name, slug, accent, sort_order")
+      .select("id, name, slug, accent, sort_order, schedule_type, tracks_post_events")
       .eq("is_active", true)
       .order("sort_order")
       .order("name"),
     admin
       .from("deal_schedule_items")
       .select(
-        "id, posting_group_id, schedule_date, schedule_hour, post_body, comment_text, asin, status, posted_at, updated_at, deal_schedule_comments(id, position, comment_text, asin)",
+        "id, posting_group_id, schedule_date, schedule_hour, schedule_position, post_body, comment_text, asin, status, posted_at, updated_at, deal_schedule_comments(id, position, comment_text, asin)",
       )
       .eq("user_id", user.id)
       .eq("schedule_date", date)
-      .order("schedule_hour"),
+      .order("schedule_position"),
   ]);
 
   if (groupsResult.error) throw new Error(`Failed to load posting groups: ${groupsResult.error.message}`);
