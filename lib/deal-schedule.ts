@@ -21,6 +21,8 @@ export type PostingGroup = {
   slug: string;
   accent: "amber" | "blue" | "emerald" | "violet" | "rose";
   sort_order: number;
+  schedule_type: "hourly" | "sequential";
+  tracks_post_events: boolean;
 };
 
 export type ScheduleStatus = "planned" | "posted";
@@ -36,7 +38,8 @@ export type ScheduleItem = {
   id: string;
   posting_group_id: string;
   schedule_date: string;
-  schedule_hour: number;
+  schedule_hour: number | null;
+  schedule_position: number;
   post_body: string;
   comment_text: string;
   asin: string | null;

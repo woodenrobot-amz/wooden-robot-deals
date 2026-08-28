@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   dateInEasternTime,
   formatScheduleHour,
@@ -26,6 +26,7 @@ type Draft = {
 type ViewMode = "edit" | "copy";
 
 const MAX_COMMENTS = 5;
+const MAX_SEQUENTIAL_DEALS = 100;
 
 function emptyComment(): DraftComment {
   return { commentText: "", asin: "" };
@@ -43,8 +44,31 @@ const accentClasses: Record<PostingGroup["accent"], string> = {
   rose: "border-rose-300/70 bg-rose-300 text-zinc-950",
 };
 
-function keyFor(groupId: string, hour: number) {
-  return `${groupId}:${hour}`;
+function keyFor(groupId: string, position: number) {
+  return `${groupId}:${position}`;
+}
+
+function slotPositions(group: PostingGroup, items: ScheduleItem[], sequenceCount?: number) {
+  if (group.schedule_type === "hourly") return SCHEDULE_HOURS;
+  const savedMaximum = items.reduce(
+    (maximum, item) =>
+      item.posting_group_id === group.id ? Math.max(maximum, item.schedule_position) : maximum,
+    0,
+  );
+  const count = Math.max(1, savedMaximum, sequenceCount || 0);
+  return Array.from({ length: count }, (_, index) => index + 1);
+}
+
+function sequenceCountsFor(items: ScheduleItem[], groups: PostingGroup[]) {
+  return Object.fromEntries(
+    groups
+      .filter((group) => group.schedule_type === "sequential")
+      .map((group) => [group.id, slotPositions(group, items).length]),
+  );
+}
+
+function slotLabel(group: PostingGroup, position: number) {
+  return group.schedule_type === "hourly" ? formatScheduleHour(position) : `Deal ${position}`;
 }
 
 function normalizedComments(item?: ScheduleItem): DraftComment[] {
@@ -63,9 +87,12 @@ function normalizedComments(item?: ScheduleItem): DraftComment[] {
   return [emptyComment()];
 }
 
-function draftFromItem(item?: ScheduleItem, group?: PostingGroup, hour?: number): Draft {
+function draftFromItem(item?: ScheduleItem, group?: PostingGroup, position?: number): Draft {
   if (!item) {
-    const recurring = group && hour !== undefined ? recurringDailySlot(group.slug, hour) : null;
+    const recurring =
+      group?.schedule_type === "hourly" && position !== undefined
+        ? recurringDailySlot(group.slug, position)
+        : null;
     return recurring
       ? {
           postBody: recurring.postBody,
@@ -85,9 +112,9 @@ function itemMatchesDraft(
   item: ScheduleItem | undefined,
   draft: Draft,
   group?: PostingGroup,
-  hour?: number,
+  position?: number,
 ) {
-  const saved = draftFromItem(item, group, hour);
+  const saved = draftFromItem(item, group, position);
   if (saved.postBody !== draft.postBody || saved.status !== draft.status) return false;
   if (saved.comments.length !== draft.comments.length) return false;
   return saved.comments.every(
@@ -116,13 +143,14 @@ function displayDate(value: string) {
 function draftsFor(items: ScheduleItem[], groups: PostingGroup[]) {
   const next: Record<string, Draft> = {};
   for (const group of groups) {
-    for (const hour of SCHEDULE_HOURS) {
-      next[keyFor(group.id, hour)] = draftFromItem(
+    for (const position of slotPositions(group, items)) {
+      next[keyFor(group.id, position)] = draftFromItem(
         items.find(
-          (item) => item.posting_group_id === group.id && item.schedule_hour === hour,
+          (item) =>
+            item.posting_group_id === group.id && item.schedule_position === position,
         ),
         group,
-        hour,
+        position,
       );
     }
   }
@@ -165,6 +193,9 @@ export function DealScheduleBoard({
   const [groups, setGroups] = useState(initialGroups);
   const [items, setItems] = useState(initialItems);
   const [drafts, setDrafts] = useState(() => draftsFor(initialItems, initialGroups));
+  const [sequenceCounts, setSequenceCounts] = useState(() =>
+    sequenceCountsFor(initialItems, initialGroups),
+  );
   const [activeGroupId, setActiveGroupId] = useState(initialGroups[0]?.id || "");
   const [mode, setMode] = useState<ViewMode>("edit");
   const [loading, setLoading] = useState(false);
@@ -181,22 +212,22 @@ export function DealScheduleBoard({
   }, []);
 
   const activeGroup = groups.find((group) => group.id === activeGroupId) || groups[0];
-  const activeItems = useMemo(
-    () => items.filter((item) => item.posting_group_id === activeGroup?.id),
-    [activeGroup?.id, items],
-  );
-  const scheduledCount = SCHEDULE_HOURS.filter((hour) => {
-    const draft = drafts[keyFor(activeGroup.id, hour)] || emptyDraft();
+  const activeItems = items.filter((item) => item.posting_group_id === activeGroup.id);
+  const activePositions = slotPositions(activeGroup, items, sequenceCounts[activeGroup.id]);
+  const scheduledCount = activePositions.filter((position) => {
+    const draft = drafts[keyFor(activeGroup.id, position)] || emptyDraft();
     return draft.postBody || draft.comments.some((comment) => comment.commentText || comment.asin);
   }).length;
   const postedCount = activeItems.filter((item) => item.status === "posted").length;
   const hasUnsavedChanges = Object.entries(drafts).some(([key, draft]) => {
-    const [groupId, hour] = key.split(":");
+    const [groupId, position] = key.split(":");
     const item = items.find(
-      (candidate) => candidate.posting_group_id === groupId && candidate.schedule_hour === Number(hour),
+      (candidate) =>
+        candidate.posting_group_id === groupId &&
+        candidate.schedule_position === Number(position),
     );
     const group = groups.find((candidate) => candidate.id === groupId);
-    return !itemMatchesDraft(item, draft, group, Number(hour));
+    return !itemMatchesDraft(item, draft, group, Number(position));
   });
 
   useEffect(() => {
@@ -213,16 +244,16 @@ export function DealScheduleBoard({
     window.localStorage.setItem("dealSchedule.viewMode", next);
   }
 
-  function updateDraft(groupId: string, hour: number, change: Partial<Draft>) {
-    const key = keyFor(groupId, hour);
+  function updateDraft(groupId: string, position: number, change: Partial<Draft>) {
+    const key = keyFor(groupId, position);
     setDrafts((current) => ({
       ...current,
       [key]: { ...(current[key] || emptyDraft()), ...change },
     }));
   }
 
-  function updateComment(groupId: string, hour: number, index: number, change: Partial<DraftComment>) {
-    const key = keyFor(groupId, hour);
+  function updateComment(groupId: string, position: number, index: number, change: Partial<DraftComment>) {
+    const key = keyFor(groupId, position);
     setDrafts((current) => {
       const draft = current[key] || emptyDraft();
       const comments = draft.comments.map((comment, commentIndex) =>
@@ -232,8 +263,8 @@ export function DealScheduleBoard({
     });
   }
 
-  function addComment(groupId: string, hour: number) {
-    const key = keyFor(groupId, hour);
+  function addComment(groupId: string, position: number) {
+    const key = keyFor(groupId, position);
     setDrafts((current) => {
       const draft = current[key] || emptyDraft();
       if (draft.comments.length >= MAX_COMMENTS) return current;
@@ -241,8 +272,8 @@ export function DealScheduleBoard({
     });
   }
 
-  function removeComment(groupId: string, hour: number, index: number) {
-    const key = keyFor(groupId, hour);
+  function removeComment(groupId: string, position: number, index: number) {
+    const key = keyFor(groupId, position);
     setDrafts((current) => {
       const draft = current[key] || emptyDraft();
       const comments = draft.comments.filter((_, commentIndex) => commentIndex !== index);
@@ -251,6 +282,17 @@ export function DealScheduleBoard({
         [key]: { ...draft, comments: comments.length ? comments : [emptyComment()] },
       };
     });
+  }
+
+  function addSequentialDeal(groupId: string) {
+    const currentCount = sequenceCounts[groupId] || 1;
+    if (currentCount >= MAX_SEQUENTIAL_DEALS) return;
+    const nextPosition = currentCount + 1;
+    setSequenceCounts((current) => ({ ...current, [groupId]: nextPosition }));
+    setDrafts((current) => ({
+      ...current,
+      [keyFor(groupId, nextPosition)]: current[keyFor(groupId, nextPosition)] || emptyDraft(),
+    }));
   }
 
   async function loadDate(nextDate: string) {
@@ -265,6 +307,7 @@ export function DealScheduleBoard({
       setGroups(data.groups);
       setItems(data.items);
       setDrafts(draftsFor(data.items, data.groups));
+      setSequenceCounts(sequenceCountsFor(data.items, data.groups));
       setExpandedPostedKeys(new Set());
       if (!data.groups.some((group) => group.id === activeGroupId)) {
         setActiveGroupId(data.groups[0]?.id || "");
@@ -277,10 +320,12 @@ export function DealScheduleBoard({
     }
   }
 
-  async function saveSlot(groupId: string, hour: number, statusOverride?: ScheduleStatus) {
-    const key = keyFor(groupId, hour);
+  async function saveSlot(groupId: string, position: number, statusOverride?: ScheduleStatus) {
+    const key = keyFor(groupId, position);
     const draft = drafts[key] || emptyDraft();
     const status = statusOverride || draft.status;
+    const group = groups.find((candidate) => candidate.id === groupId);
+    if (!group) return;
     setBusyKey(key);
     setNotice("");
     try {
@@ -290,7 +335,8 @@ export function DealScheduleBoard({
         body: JSON.stringify({
           postingGroupId: groupId,
           scheduleDate: date,
-          scheduleHour: hour,
+          scheduleHour: group.schedule_type === "hourly" ? position : null,
+          schedulePosition: position,
           postBody: draft.postBody,
           comments: draft.comments,
           status,
@@ -301,7 +347,8 @@ export function DealScheduleBoard({
 
       setItems((current) => {
         const withoutSlot = current.filter(
-          (item) => !(item.posting_group_id === groupId && item.schedule_hour === hour),
+          (item) =>
+            !(item.posting_group_id === groupId && item.schedule_position === position),
         );
         return data.item ? [...withoutSlot, data.item] : withoutSlot;
       });
@@ -316,9 +363,10 @@ export function DealScheduleBoard({
           return next;
         });
       }
-      setNotice(data.item ? `${formatScheduleHour(hour)} saved.` : `${formatScheduleHour(hour)} cleared.`);
+      const label = slotLabel(group, position);
+      setNotice(data.item ? `${label} saved.` : `${label} cleared.`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Could not save this time slot.");
+      setNotice(error instanceof Error ? error.message : "Could not save this deal.");
     } finally {
       setBusyKey(null);
     }
@@ -401,7 +449,12 @@ export function DealScheduleBoard({
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 px-4 py-3 text-sm">
         <div className="flex items-center gap-4">
-          <span><strong className="text-white">{scheduledCount}</strong><span className="text-zinc-500"> / 13 scheduled</span></span>
+          <span>
+            <strong className="text-white">{scheduledCount}</strong>
+            <span className="text-zinc-500">
+              {activeGroup.schedule_type === "hourly" ? " / 13 scheduled" : " planned"}
+            </span>
+          </span>
           <span><strong className="text-emerald-300">{postedCount}</strong><span className="text-zinc-500"> posted</span></span>
         </div>
         <div aria-live="polite" className={`font-semibold ${notice ? "text-amber-300" : "text-zinc-600"}`}>
@@ -410,30 +463,36 @@ export function DealScheduleBoard({
       </div>
 
       <div className="mt-4 space-y-3" aria-busy={loading}>
-        {SCHEDULE_HOURS.map((hour) => {
-          const key = keyFor(activeGroup.id, hour);
+        {activePositions.map((position) => {
+          const key = keyFor(activeGroup.id, position);
           const item = items.find(
-            (candidate) => candidate.posting_group_id === activeGroup.id && candidate.schedule_hour === hour,
+            (candidate) =>
+              candidate.posting_group_id === activeGroup.id &&
+              candidate.schedule_position === position,
           );
           const draft = drafts[key] || emptyDraft();
-          const dirty = !itemMatchesDraft(item, draft, activeGroup, hour);
+          const dirty = !itemMatchesDraft(item, draft, activeGroup, position);
           const filled = Boolean(draft.postBody || draft.comments.some((comment) => comment.commentText || comment.asin));
           const posted = draft.status === "posted";
-          const recurring = recurringDailySlot(activeGroup.slug, hour);
+          const recurring =
+            activeGroup.schedule_type === "hourly"
+              ? recurringDailySlot(activeGroup.slug, position)
+              : null;
           const collapsed = mode === "copy" && posted && !expandedPostedKeys.has(key);
+          const label = slotLabel(activeGroup, position);
 
           if (mode === "copy") {
             return (
-              <article key={hour} className={`overflow-hidden rounded-2xl border bg-zinc-900/90 ${posted ? "border-emerald-400/40" : filled ? "border-zinc-700" : "border-zinc-800"}`}>
+              <article key={position} className={`overflow-hidden rounded-2xl border bg-zinc-900/90 ${posted ? "border-emerald-400/40" : filled ? "border-zinc-700" : "border-zinc-800"}`}>
                 <div className={`flex items-center justify-between px-4 py-3 ${collapsed ? "" : "border-b border-zinc-800"}`}>
                   <div className="flex items-center gap-3">
-                    <span className="text-lg font-black tabular-nums text-white">{formatScheduleHour(hour)}</span>
+                    <span className="text-lg font-black tabular-nums text-white">{label}</span>
                     {recurring && <span className="text-xs font-bold text-amber-300">{recurring.label}</span>}
                     {posted && <span className="rounded-full bg-emerald-400/15 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-300">Posted</span>}
                     {draft.comments.length > 1 && <span className="text-xs font-bold text-sky-300">{draft.comments.length} comments</span>}
                   </div>
                   {posted && (
-                    <button type="button" onClick={() => setExpandedPostedKeys((current) => { const next = new Set(current); collapsed ? next.add(key) : next.delete(key); return next; })} className="min-h-11 rounded-lg bg-zinc-800 px-3 text-xs font-bold text-zinc-200">
+                    <button type="button" onClick={() => setExpandedPostedKeys((current) => { const next = new Set(current); if (collapsed) next.add(key); else next.delete(key); return next; })} className="min-h-11 rounded-lg bg-zinc-800 px-3 text-xs font-bold text-zinc-200">
                       {collapsed ? "Show" : "Collapse"}
                     </button>
                   )}
@@ -451,28 +510,28 @@ export function DealScheduleBoard({
                       {draft.comments.map((comment, index) => (
                         <div key={index} className="min-w-0 rounded-xl bg-zinc-950/70 p-3">
                           <div className="mb-2 flex items-center justify-between gap-2">
-                            <div><span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Comment {index + 1}</span>{comment.asin && <span className="ml-2 font-mono text-[11px] text-zinc-600">{comment.asin}</span>}</div>
+                            <div><span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Comment {index + 1}</span>{activeGroup.tracks_post_events && comment.asin && <span className="ml-2 font-mono text-[11px] text-zinc-600">{comment.asin}</span>}</div>
                             <button type="button" onClick={() => handleCopy(comment.commentText, `${key}:comment:${index}`)} disabled={!comment.commentText} className="min-h-11 rounded-lg bg-sky-300 px-4 text-sm font-extrabold text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-600">{copiedKey === `${key}:comment:${index}` ? "Copied ✓" : `Copy ${index + 1}`}</button>
                           </div>
                           <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{comment.commentText || "No comment text"}</p>
                         </div>
                       ))}
                     </div>
-                    <button type="button" onClick={() => saveSlot(activeGroup.id, hour, posted ? "planned" : "posted")} disabled={busyKey === key} className={`min-h-11 w-full rounded-xl text-sm font-bold ${posted ? "bg-zinc-800 text-zinc-300" : "bg-emerald-400/15 text-emerald-300"}`}>
+                    <button type="button" onClick={() => saveSlot(activeGroup.id, position, posted ? "planned" : "posted")} disabled={busyKey === key} className={`min-h-11 w-full rounded-xl text-sm font-bold ${posted ? "bg-zinc-800 text-zinc-300" : "bg-emerald-400/15 text-emerald-300"}`}>
                       {busyKey === key ? "Saving…" : posted ? "Mark as planned" : "Mark posted"}
                     </button>
                   </div>
-                ) : <p className="px-4 py-5 text-sm text-zinc-600">Open edit mode to schedule this hour.</p>)}
+                ) : <p className="px-4 py-5 text-sm text-zinc-600">Open edit mode to plan this deal.</p>)}
               </article>
             );
           }
 
           return (
-            <article key={hour} className={`rounded-2xl border bg-zinc-900/90 p-4 transition sm:p-5 ${dirty ? "border-amber-300/50" : posted ? "border-emerald-400/35" : "border-zinc-800"}`}>
+            <article key={position} className={`rounded-2xl border bg-zinc-900/90 p-4 transition sm:p-5 ${dirty ? "border-amber-300/50" : posted ? "border-emerald-400/35" : "border-zinc-800"}`}>
               <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[7rem_minmax(0,1.15fr)_minmax(0,1fr)]">
                 <div className="flex items-center justify-between gap-3 xl:block">
                   <div>
-                    <p className="text-xl font-black tabular-nums">{formatScheduleHour(hour)}</p>
+                    <p className="text-xl font-black tabular-nums">{label}</p>
                     {recurring && <p className="mt-1 text-xs font-bold text-amber-300">{recurring.label}</p>}
                     <p className={`mt-1 text-xs font-bold uppercase tracking-wider ${posted ? "text-emerald-300" : dirty ? "text-amber-300" : "text-zinc-600"}`}>{posted ? "Posted" : dirty ? "Unsaved" : filled ? "Ready" : "Open"}</p>
                     {draft.comments.length > 1 && <p className="mt-2 text-xs font-bold text-sky-300">{draft.comments.length} comments</p>}
@@ -481,7 +540,7 @@ export function DealScheduleBoard({
 
                 <label className="block">
                   <span className="flex items-center justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Post body</span><PostCharacterCount length={draft.postBody.length} /></span>
-                  <textarea value={draft.postBody} lang="en-US" spellCheck={true} autoCorrect="on" autoCapitalize="sentences" onChange={(event) => updateDraft(activeGroup.id, hour, { postBody: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveSlot(activeGroup.id, hour); }} placeholder="Write the main deal post…" rows={5} className="mt-2 w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-base leading-6 text-white outline-none placeholder:text-zinc-700 focus:border-amber-300" />
+                  <textarea value={draft.postBody} lang="en-US" spellCheck={true} autoCorrect="on" autoCapitalize="sentences" onChange={(event) => updateDraft(activeGroup.id, position, { postBody: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveSlot(activeGroup.id, position); }} placeholder="Write the main deal post…" rows={5} className="mt-2 w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-base leading-6 text-white outline-none placeholder:text-zinc-700 focus:border-amber-300" />
                 </label>
 
                 <div className="space-y-3">
@@ -490,33 +549,45 @@ export function DealScheduleBoard({
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Comment {index + 1}</span>
                         {draft.comments.length > 1 && (
-                          <button type="button" onClick={() => removeComment(activeGroup.id, hour, index)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-zinc-500 hover:bg-zinc-800 hover:text-red-300">Remove</button>
+                          <button type="button" onClick={() => removeComment(activeGroup.id, position, index)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-zinc-500 hover:bg-zinc-800 hover:text-red-300">Remove</button>
                         )}
                       </div>
-                      <textarea value={comment.commentText} lang="en-US" spellCheck={true} autoCorrect="on" autoCapitalize="sentences" onChange={(event) => updateComment(activeGroup.id, hour, index, { commentText: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveSlot(activeGroup.id, hour); }} placeholder="Add the link, coupon, or follow-up comment…" rows={draft.comments.length > 1 ? 3 : 5} className="mt-2 w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-base leading-6 text-white outline-none placeholder:text-zinc-700 focus:border-sky-300" />
-                      <input value={comment.asin} onChange={(event) => updateComment(activeGroup.id, hour, index, { asin: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) })} placeholder="ASIN (optional)" aria-label={`${formatScheduleHour(hour)} Comment ${index + 1} ASIN`} className="mt-2 min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 font-mono text-sm uppercase text-white outline-none focus:border-sky-300" />
+                      <textarea value={comment.commentText} lang="en-US" spellCheck={true} autoCorrect="on" autoCapitalize="sentences" onChange={(event) => updateComment(activeGroup.id, position, index, { commentText: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveSlot(activeGroup.id, position); }} placeholder="Add the link, coupon, or follow-up comment…" rows={draft.comments.length > 1 ? 3 : 5} className="mt-2 w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-base leading-6 text-white outline-none placeholder:text-zinc-700 focus:border-sky-300" />
+                      {activeGroup.tracks_post_events && (
+                        <input value={comment.asin} onChange={(event) => updateComment(activeGroup.id, position, index, { asin: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) })} placeholder="ASIN (optional)" aria-label={`${label} Comment ${index + 1} ASIN`} className="mt-2 min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 font-mono text-sm uppercase text-white outline-none focus:border-sky-300" />
+                      )}
                     </div>
                   ))}
                   {draft.comments.length < MAX_COMMENTS && (
-                    <button type="button" onClick={() => addComment(activeGroup.id, hour)} className="min-h-11 w-full rounded-xl border border-dashed border-zinc-700 text-sm font-bold text-sky-300 hover:border-sky-300/60 hover:bg-sky-300/5">+ Add comment</button>
+                    <button type="button" onClick={() => addComment(activeGroup.id, position)} className="min-h-11 w-full rounded-xl border border-dashed border-zinc-700 text-sm font-bold text-sky-300 hover:border-sky-300/60 hover:bg-sky-300/5">+ Add comment</button>
                   )}
                 </div>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-4 xl:pl-[8rem]">
-                <button type="button" onClick={() => saveSlot(activeGroup.id, hour)} disabled={busyKey === key || !dirty} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-extrabold text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-600">{busyKey === key ? "Saving…" : dirty ? "Save slot" : "Saved"}</button>
+                <button type="button" onClick={() => saveSlot(activeGroup.id, position)} disabled={busyKey === key || !dirty} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-extrabold text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-600">{busyKey === key ? "Saving…" : dirty ? activeGroup.schedule_type === "hourly" ? "Save slot" : "Save deal" : "Saved"}</button>
                 <button type="button" onClick={() => handleCopy(draft.postBody, `${key}:post`)} disabled={!draft.postBody} className="min-h-11 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200 disabled:text-zinc-600">{copiedKey === `${key}:post` ? "Post copied ✓" : "Copy post"}</button>
                 {draft.comments.map((comment, index) => (
                   <button key={index} type="button" onClick={() => handleCopy(comment.commentText, `${key}:comment:${index}`)} disabled={!comment.commentText} className="min-h-11 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200 disabled:text-zinc-600">{copiedKey === `${key}:comment:${index}` ? `Comment ${index + 1} copied ✓` : draft.comments.length > 1 ? `Copy comment ${index + 1}` : "Copy comment"}</button>
                 ))}
                 {filled && (
-                  <button type="button" onClick={() => saveSlot(activeGroup.id, hour, posted ? "planned" : "posted")} disabled={busyKey === key} className={`min-h-11 rounded-xl px-4 text-sm font-bold ${posted ? "bg-emerald-300 text-zinc-950" : "bg-emerald-400/10 text-emerald-300"}`}>{posted ? "Posted ✓" : "Mark posted"}</button>
+                  <button type="button" onClick={() => saveSlot(activeGroup.id, position, posted ? "planned" : "posted")} disabled={busyKey === key} className={`min-h-11 rounded-xl px-4 text-sm font-bold ${posted ? "bg-emerald-300 text-zinc-950" : "bg-emerald-400/10 text-emerald-300"}`}>{posted ? "Posted ✓" : "Mark posted"}</button>
                 )}
               </div>
             </article>
           );
         })}
       </div>
+      {activeGroup.schedule_type === "sequential" && mode === "edit" && (
+        <button
+          type="button"
+          onClick={() => addSequentialDeal(activeGroup.id)}
+          disabled={(sequenceCounts[activeGroup.id] || 1) >= MAX_SEQUENTIAL_DEALS}
+          className="mt-4 min-h-12 w-full rounded-2xl border border-dashed border-emerald-300/50 bg-emerald-300/5 text-sm font-extrabold text-emerald-300 hover:border-emerald-300 hover:bg-emerald-300/10 disabled:opacity-50"
+        >
+          + Add another deal
+        </button>
+      )}
     </section>
   );
 }
