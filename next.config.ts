@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  env: {
+    CLOUDFLARE_PAGE_REWRITE_MODEL: "@cf/google/gemma-4-26b-a4b-it",
+  },
   async headers() {
     return [
       {
