@@ -5,7 +5,7 @@ import { isScheduleDate } from "@/lib/deal-schedule";
 
 const SOURCE_SLUG = "woodworking";
 const TARGET_SLUG = "woodworking-page";
-const CLOUDFLARE_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 
 async function authenticatedUser() {
   const supabase = await createClient();
@@ -23,102 +23,89 @@ function shuffledDerangement(hours: number[]) {
   return shuffled;
 }
 
-function extractCloudflareText(payload: unknown) {
+function extractGeminiText(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
-  const envelope = payload as { result?: { response?: string; choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }> }; choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }> };
-  const result = envelope.result;
-  if (typeof result?.response === "string" && result.response.trim()) return result.response.trim();
-  const choices = result?.choices || envelope.choices || [];
-  const content = choices[0]?.message?.content;
-  if (typeof content === "string") return content.trim();
-  if (Array.isArray(content)) return content.filter((part) => part.type === "text" && typeof part.text === "string").map((part) => part.text!.trim()).filter(Boolean).join("\n").trim();
-  return "";
+  const envelope = payload as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+  return (envelope.candidates?.[0]?.content?.parts || [])
+    .map((part) => typeof part.text === "string" ? part.text.trim() : "")
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 }
 
-function cloudflareEmptyReason(payload: unknown) {
-  if (!payload || typeof payload !== "object") return "unknown response shape";
-  const envelope = payload as { result?: { choices?: Array<{ finish_reason?: string; message?: { reasoning_content?: string } }> }; choices?: Array<{ finish_reason?: string; message?: { reasoning_content?: string } }> };
-  const choice = (envelope.result?.choices || envelope.choices || [])[0];
-  const details = [choice?.finish_reason ? `finish_reason=${choice.finish_reason}` : null, choice?.message?.reasoning_content ? `reasoning_chars=${choice.message.reasoning_content.length}` : null].filter(Boolean);
-  return details.length ? details.join(", ") : "no text content in response";
-}
-
-const REWRITE_INSTRUCTIONS = `Write a second Facebook post about the same woodworking deal. It should sound like the same person had another quick thought about the deal, NOT like an AI rewrote the first post.
+const REWRITE_INSTRUCTIONS = `Write a second Facebook post about the same woodworking deal. This is NOT a paraphrasing task. Ask yourself: "What is another thing the same person might naturally say about this same deal?"
 
 VOICE:
-- Casual, concise, conversational. Usually 1-3 short sentences.
-- Dry humor, sarcasm, teasing, wordplay, mild innuendo, or an intentionally dumb joke are welcome when the source gives you room for it.
-- Sometimes the best post is just a short observation or question.
-- Straightforward deal copy is also fine. Do not force a joke into every post.
-- Sound like a woodworker talking to other woodworkers, not a marketer, reviewer, product expert, or how-to article.
+- Casual, concise, conversational. Usually 1-2 short sentences.
+- Sound like a woodworker talking to other woodworkers, not a marketer, reviewer, product expert, or social media manager.
+- Dry humor, mild sarcasm, dumb jokes, self-deprecation, questions, and quick observations are welcome when the source gives you room for them.
+- Do not force humor. A boring but natural 8-word post is better than a clever post based on something invented.
+- Very short posts are fine.
 
-MOST IMPORTANT RULE: DO NOT MAKE THINGS UP.
-- Use ONLY facts and personal experience explicitly stated in the source post.
-- Never invent having owned, used, tested, seen, installed, compared, or worked with anything.
-- Never invent a project, friend, customer, house, shop situation, product capability, use case, specification, price history, performance claim, or recommendation.
-- Do not turn a possibility into a fact. If the source says something might/could work, keep that uncertainty.
-- If there is not enough information for a detailed alternate post, WRITE LESS. A five-word reaction is better than filling in missing details.
+FACTUAL BOUNDARIES — MOST IMPORTANT:
+- Use ONLY information established by the source post.
+- You may omit source information. You do not need to squeeze every fact into the alternate post.
+- Never invent product specs, uses, quality, value, price history, comparisons, ownership, purchases, plans to purchase, projects, friends, customers, family, or firsthand experience.
+- Personal experience may be reused ONLY when the source explicitly establishes it.
+- Do not turn a possibility into a fact or purchase intent.
+- If the source gives you very little information, WRITE LESS rather than filling in missing details.
 
-HOW TO MAKE IT DIFFERENT:
-- Find a different angle, reaction, joke, question, or emphasis using the SAME known information.
-- Do not mechanically paraphrase sentence-by-sentence.
-- Do not explain the product unless the source explains it.
-- Preserve important deal facts when useful, but you do not have to repeat every fact.
-- Personal facts may be reused only when explicitly present in the source.
+MAKE IT DIFFERENT:
+- Find a different angle, reaction, question, joke, or emphasis while staying inside the known facts.
+- Do not mechanically replace words with synonyms or preserve the original sentence structure.
+- A safe paraphrase is preferable to an entertaining hallucination when there is no strong alternate angle.
 
 AVOID:
-- Generic advice or educational filler.
-- Polished marketing language.
-- Phrases like "game-changer", "make all the difference", "great addition to your workshop", "perfect for", "whether you're", "if you're looking to upgrade", "don't miss out", or "deal alert".
+- Generic advice, educational filler, or polished marketing language.
+- Phrases like "game-changer", "worth a look", "great addition to your workshop", "perfect for", "whether you're", "if you're looking to upgrade", "don't miss out", "deal alert", or "must have".
 - Fake authority such as "I've found", "I've seen", "I've worked with", or "in my experience" unless the source explicitly establishes it.
 - Emojis, hashtags, affiliate links, promo codes, ASINs, labels, explanations, or multiple options.
 
-GOOD EXAMPLES OF THE VOICE:
+EXAMPLES:
 Source: Makita 36V track saw. Lots to love on this option. Cords are okay, but cordless convenience is fantastic.
-Alternate: Cordless track saws like this Makita 36V model make you wonder why you ever bothered with cords in the first place.
+Alternate: Hard to go back to dragging a cord around once you've used a cordless track saw.
+
+Source: Do you prefer the blade on the right or the left side of your circular saw?
+Alternate: Circular saw blade left or blade right seems to be one of those debates nobody ever wins.
 
 Source: 12pk of moving blankets. Maybe you've spent more than you should. The blankets will help you sleep better in your shop.
 Alternate: At this price you can protect your tools AND build yourself a place to sleep when your wife sees the credit card bill.
 
-Source: If you're looking to move to a larger dust collector, this one might be it. 2HP with a cyclone built in. This one probably sucks.
-Alternate: 2HP. Cyclone. Hopefully it sucks as much as it should.
-
-Source: If you have 7-9 identical drills, this tool organizer is for you... Okay, you don't really need 7-9 drills, but I like a lot about this one.
-Alternate: Nobody needs 9 drills. That doesn't mean you can't organize them like you do.
-
-Source: This protractor goes on sale about once a month. It's that time of the month.
-Alternate: Monthly protractor sale. Make your own joke here, I'm staying out of it.
-
-Source: Parallel clamps. 36\". 2200lb of clamping force. Enough said.
-Alternate: 2200lb of clamping force. Your glue-up has been warned.
-
-Source: Do you prefer the blade on the right or the left side of your circular saw?
-Alternate: Blade left or blade right? Apparently woodworkers need another thing to disagree about.
+Source: This carving set is a great price right now. It's good for wood and pumpkins.
+Bad alternate: You can carve pumpkins, but I'm only buying it for the wood.
+Why bad: The source never says the writer is buying it. Never make this kind of inference.
 
 Return ONLY the finished alternate post.`;
 
 async function rewritePostBody(sourceBody: string) {
   if (!sourceBody.trim()) return "";
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  const apiToken = process.env.CLOUDFLARE_AI_API_TOKEN;
-  if (!accountId || !apiToken) throw new Error("Cloudflare Workers AI credentials are not configured for Page rewrites.");
-  const modelPath = CLOUDFLARE_MODEL.split("/").map(encodeURIComponent).join("/");
-  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/ai/run/${modelPath}`, {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Gemini API key is not configured for Page rewrites.");
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json" },
+    headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({
-      messages: [{ role: "system", content: REWRITE_INSTRUCTIONS }, { role: "user", content: `SOURCE GROUP POST:\n${sourceBody}` }],
-      max_tokens: 160,
-      temperature: 0.75,
+      systemInstruction: { parts: [{ text: REWRITE_INSTRUCTIONS }] },
+      contents: [{ role: "user", parts: [{ text: `SOURCE GROUP POST:\n${sourceBody}` }] }],
+      generationConfig: {
+        maxOutputTokens: 160,
+        temperature: 0.75,
+        thinkingConfig: { thinkingLevel: "minimal" },
+      },
     }),
   });
+
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const message = payload && typeof payload === "object" && "errors" in payload ? (payload as { errors?: Array<{ message?: string }> }).errors?.map((error) => error.message).filter(Boolean).join("; ") : null;
-    throw new Error(message || `Cloudflare Workers AI rewrite failed (${response.status}).`);
+    const message = payload && typeof payload === "object" && "error" in payload
+      ? (payload as { error?: { message?: string } }).error?.message
+      : null;
+    throw new Error(message || `Gemini Page rewrite failed (${response.status}).`);
   }
-  const rewritten = extractCloudflareText(payload);
-  if (!rewritten) throw new Error(`Cloudflare Workers AI returned an empty Page rewrite (${cloudflareEmptyReason(payload)}).`);
+
+  const rewritten = extractGeminiText(payload);
+  if (!rewritten) throw new Error("Gemini returned an empty Page rewrite.");
   if (rewritten.length > 10000) throw new Error("Generated Page rewrite exceeded the post length limit.");
   return rewritten;
 }
@@ -189,5 +176,5 @@ export async function POST(request: Request) {
     if (commentsError) return NextResponse.json({ error: commentsError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ generated: generated.length, mappings: generated.map(({ source, targetHour }) => ({ sourceHour: source.schedule_hour ?? source.schedule_position, targetHour })), bodyMode: "llm-rewritten", provider: "cloudflare-workers-ai", model: CLOUDFLARE_MODEL });
+  return NextResponse.json({ generated: generated.length, mappings: generated.map(({ source, targetHour }) => ({ sourceHour: source.schedule_hour ?? source.schedule_position, targetHour })), bodyMode: "llm-rewritten", provider: "google-gemini", model: GEMINI_MODEL });
 }
