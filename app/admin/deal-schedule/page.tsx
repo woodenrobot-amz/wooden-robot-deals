@@ -1,20 +1,9 @@
-import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DealScheduleBoard } from "./deal-schedule-board";
-import { GeneratePageButton } from "./generate-page-button";
-import { UnplannedPostTracker } from "./unplanned-post-tracker";
-import { CommentLinkPreviews } from "./comment-link-previews";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { dateInEasternTime, isScheduleDate } from "@/lib/deal-schedule";
-import { isAdminSurface } from "@/lib/app-surface";
+import { dateInEasternTime, type PostingGroup, type ScheduleItem } from "@/lib/deal-schedule";
+import { DealScheduleBoard } from "./deal-schedule-board";
 
-export const metadata: Metadata = {
-  title: "Deal Schedule",
-  description: "Plan, copy, and track daily deal posts by group and time.",
-  manifest: isAdminSurface ? "/manifest.webmanifest" : "/admin-schedule.webmanifest",
-};
+export const dynamic = "force-dynamic";
 
 export default async function DealSchedulePage({
   searchParams,
@@ -22,49 +11,47 @@ export default async function DealSchedulePage({
   searchParams: Promise<{ date?: string }>;
 }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const requestedDate = (await searchParams).date;
-  const date = isScheduleDate(requestedDate) ? requestedDate : dateInEasternTime();
-  const admin = createAdminClient();
-  const [groupsResult, itemsResult] = await Promise.all([
-    admin
-      .from("deal_posting_groups")
-      .select("id, name, slug, accent, sort_order, schedule_type, tracks_post_events")
-      .eq("is_active", true)
-      .order("sort_order")
-      .order("name"),
-    admin
+  if (!user) redirect("/admin/login");
+
+  const params = await searchParams;
+  const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(params.date || "")
+    ? params.date!
+    : dateInEasternTime();
+
+  const [{ data: groups, error: groupsError }, { data: items, error: itemsError }] = await Promise.all([
+    supabase
+      .from("posting_groups")
+      .select("id, slug, name, schedule_type, accent, sort_order, active, tracks_post_events")
+      .eq("active", true)
+      .order("sort_order", { ascending: true }),
+    supabase
       .from("deal_schedule_items")
-      .select(
-        "id, posting_group_id, schedule_date, schedule_hour, schedule_position, post_body, comment_text, asin, status, posted_at, updated_at, deal_schedule_comments(id, position, comment_text, asin)",
-      )
-      .eq("user_id", user.id)
-      .eq("schedule_date", date)
-      .order("schedule_position"),
+      .select("*, deal_schedule_comments(*)")
+      .eq("schedule_date", selectedDate)
+      .order("schedule_position", { ascending: true }),
   ]);
 
-  if (groupsResult.error) throw new Error(`Failed to load posting groups: ${groupsResult.error.message}`);
-  if (itemsResult.error) throw new Error(`Failed to load the deal schedule: ${itemsResult.error.message}`);
-
-  const groups = groupsResult.data || [];
-  const items = (itemsResult.data || []).map((item) => ({
-    ...item,
-    deal_schedule_comments: [...(item.deal_schedule_comments || [])].sort((a, b) => a.position - b.position),
-  }));
+  if (groupsError || itemsError) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8 text-zinc-100 sm:px-6">
+        <div className="rounded-2xl border border-red-900/50 bg-red-950/30 p-5 text-sm text-red-200">
+          Could not load Posting Desk. {groupsError?.message || itemsError?.message}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-[#090b10] px-3 pb-16 pt-4 text-white sm:px-5 sm:pt-7">
-      <div className="mx-auto max-w-7xl">
-        <Link href="/admin" className="inline-flex min-h-11 items-center text-sm font-semibold text-amber-300">
-          ← Admin
-        </Link>
-        <UnplannedPostTracker />
-        <GeneratePageButton scheduleDate={date} />
-        <DealScheduleBoard initialDate={date} initialGroups={groups} initialItems={items} />
-        <CommentLinkPreviews />
-      </div>
+    <main className="mx-auto max-w-7xl px-3 pb-24 pt-4 text-zinc-100 sm:px-6 sm:pt-6">
+      <DealScheduleBoard
+        initialDate={selectedDate}
+        initialGroups={(groups || []) as PostingGroup[]}
+        initialItems={(items || []) as ScheduleItem[]}
+      />
     </main>
   );
 }
