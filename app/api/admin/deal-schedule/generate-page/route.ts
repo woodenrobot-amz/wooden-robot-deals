@@ -5,7 +5,7 @@ import { isScheduleDate } from "@/lib/deal-schedule";
 
 const SOURCE_SLUG = "woodworking";
 const TARGET_SLUG = "woodworking-page";
-const CLOUDFLARE_MODEL = process.env.CLOUDFLARE_PAGE_REWRITE_MODEL || "@cf/zai-org/glm-4.7-flash";
+const CLOUDFLARE_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 
 async function authenticatedUser() {
   const supabase = await createClient();
@@ -100,8 +100,7 @@ async function rewritePostBody(sourceBody: string) {
           { role: "system", content: REWRITE_INSTRUCTIONS },
           { role: "user", content: `SOURCE GROUP POST:\n${sourceBody}` },
         ],
-        max_completion_tokens: 700,
-        reasoning_effort: "low",
+        max_tokens: 200,
         temperature: 0.8,
       }),
     },
