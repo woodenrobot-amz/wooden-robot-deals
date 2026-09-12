@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DealScheduleBoard } from "./deal-schedule-board";
+import { GeneratePageButton } from "./generate-page-button";
 import { UnplannedPostTracker } from "./unplanned-post-tracker";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -59,6 +60,7 @@ export default async function DealSchedulePage({
           ← Admin
         </Link>
         <UnplannedPostTracker />
+        <GeneratePageButton scheduleDate={date} />
         <DealScheduleBoard initialDate={date} initialGroups={groups} initialItems={items} />
       </div>
     </main>
