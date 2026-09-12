@@ -25,8 +25,31 @@ function shuffledDerangement(hours: number[]) {
 
 function extractCloudflareText(payload: unknown) {
   if (!payload || typeof payload !== "object") return "";
-  const response = payload as { result?: { response?: string } };
-  return typeof response.result?.response === "string" ? response.result.response.trim() : "";
+
+  const envelope = payload as {
+    result?: {
+      response?: string;
+      choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>;
+    };
+    choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> } }>;
+  };
+
+  const result = envelope.result;
+  if (typeof result?.response === "string" && result.response.trim()) return result.response.trim();
+
+  const choices = result?.choices || envelope.choices || [];
+  const content = choices[0]?.message?.content;
+  if (typeof content === "string") return content.trim();
+  if (Array.isArray(content)) {
+    return content
+      .filter((part) => part.type === "text" && typeof part.text === "string")
+      .map((part) => part.text!.trim())
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+  }
+
+  return "";
 }
 
 const REWRITE_INSTRUCTIONS = `You write alternate Facebook Page copy for a woodworking-deals creator. The source is a post the same creator already wrote for a Facebook Group. Create another natural human reaction to the same deal rather than mechanically paraphrasing it.
@@ -63,7 +86,7 @@ async function rewritePostBody(sourceBody: string) {
           { role: "system", content: REWRITE_INSTRUCTIONS },
           { role: "user", content: `SOURCE GROUP POST:\n${sourceBody}` },
         ],
-        max_tokens: 180,
+        max_completion_tokens: 180,
         temperature: 0.8,
       }),
     },
