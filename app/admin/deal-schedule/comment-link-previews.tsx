@@ -18,12 +18,14 @@ function cleanUrl(value: string) {
   return match?.replace(/[),.;!?]+$/, "") || "";
 }
 
-function previewElement(textarea: HTMLTextAreaElement) {
-  let preview = textarea.parentElement?.querySelector<HTMLElement>(`:scope > .${PREVIEW_CLASS}`);
+function previewElement(source: HTMLElement) {
+  const container = source.parentElement;
+  if (!container) return null;
+  let preview = container.querySelector<HTMLElement>(`:scope > .${PREVIEW_CLASS}`);
   if (!preview) {
     preview = document.createElement("div");
     preview.className = `${PREVIEW_CLASS} mt-2 hidden overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/80`;
-    textarea.insertAdjacentElement("afterend", preview);
+    source.insertAdjacentElement("afterend", preview);
   }
   return preview;
 }
@@ -85,19 +87,35 @@ function renderPreview(preview: HTMLElement, data: PreviewData) {
   preview.append(row);
 }
 
+function isCommentTextarea(element: Element): element is HTMLTextAreaElement {
+  return element instanceof HTMLTextAreaElement &&
+    element.placeholder.startsWith("Add the link, coupon, or follow-up comment");
+}
+
+function copyModeCommentSources(root: ParentNode) {
+  const sources: HTMLElement[] = [];
+  root.querySelectorAll<HTMLElement>("span").forEach((label) => {
+    if (!/^Comment \d+$/.test(label.textContent?.trim() || "")) return;
+    const card = label.closest<HTMLElement>(".rounded-xl.bg-zinc-950\\/70");
+    const text = card?.querySelector<HTMLElement>("p.whitespace-pre-wrap");
+    if (text && cleanUrl(text.textContent || "")) sources.push(text);
+  });
+  return sources;
+}
+
 export function CommentLinkPreviews() {
   useEffect(() => {
-    const controllers = new WeakMap<HTMLTextAreaElement, AbortController>();
-    const timers = new WeakMap<HTMLTextAreaElement, number>();
+    const controllers = new WeakMap<HTMLElement, AbortController>();
+    const timers = new WeakMap<HTMLElement, number>();
 
-    function isCommentTextarea(element: Element): element is HTMLTextAreaElement {
-      return element instanceof HTMLTextAreaElement &&
-        element.placeholder.startsWith("Add the link, coupon, or follow-up comment");
+    function sourceText(source: HTMLElement) {
+      return source instanceof HTMLTextAreaElement ? source.value : source.textContent || "";
     }
 
-    async function update(textarea: HTMLTextAreaElement) {
-      const preview = previewElement(textarea);
-      const url = cleanUrl(textarea.value);
+    async function update(source: HTMLElement) {
+      const preview = previewElement(source);
+      if (!preview) return;
+      const url = cleanUrl(sourceText(source));
       const previous = preview.dataset.previewUrl || "";
       if (!url) {
         preview.dataset.previewUrl = "";
@@ -107,9 +125,9 @@ export function CommentLinkPreviews() {
       }
       if (url === previous && preview.dataset.previewState === "done") return;
 
-      controllers.get(textarea)?.abort();
+      controllers.get(source)?.abort();
       const controller = new AbortController();
-      controllers.set(textarea, controller);
+      controllers.set(source, controller);
       preview.dataset.previewUrl = url;
       preview.dataset.previewState = "loading";
       renderLoading(preview);
@@ -120,36 +138,57 @@ export function CommentLinkPreviews() {
           signal: controller.signal,
         });
         const data = (await response.json()) as PreviewData;
-        if (controller.signal.aborted || cleanUrl(textarea.value) !== url) return;
+        if (controller.signal.aborted || cleanUrl(sourceText(source)) !== url) return;
         preview.dataset.previewState = "done";
         renderPreview(preview, { ...data, url });
-      } catch (error) {
+      } catch {
         if (controller.signal.aborted) return;
         preview.dataset.previewState = "done";
         renderUnavailable(preview, url);
       }
     }
 
-    function schedule(textarea: HTMLTextAreaElement) {
-      const oldTimer = timers.get(textarea);
+    function schedule(source: HTMLElement, delay = 100) {
+      const oldTimer = timers.get(source);
       if (oldTimer) window.clearTimeout(oldTimer);
-      const timer = window.setTimeout(() => update(textarea), 350);
-      timers.set(textarea, timer);
+      const timer = window.setTimeout(() => update(source), delay);
+      timers.set(source, timer);
     }
 
-    function attach(root: ParentNode = document) {
-      root.querySelectorAll("textarea").forEach((element) => {
-        if (!isCommentTextarea(element) || element.dataset.linkPreviewAttached === "true") return;
-        element.dataset.linkPreviewAttached = "true";
-        element.addEventListener("input", () => schedule(element));
-        schedule(element);
+    function sync() {
+      document.querySelectorAll("textarea").forEach((element) => {
+        if (!isCommentTextarea(element)) return;
+        if (element.dataset.linkPreviewListener !== "true") {
+          element.dataset.linkPreviewListener = "true";
+          element.addEventListener("input", () => schedule(element, 350));
+        }
+        // React may remove a previously injected sibling during a controlled-input
+        // rerender. Always verify the preview still exists instead of relying on an
+        // attached flag.
+        const preview = previewElement(element);
+        if (preview && cleanUrl(element.value) && preview.dataset.previewState !== "done") {
+          schedule(element);
+        }
+      });
+
+      copyModeCommentSources(document).forEach((source) => {
+        const preview = previewElement(source);
+        if (preview && preview.dataset.previewState !== "done") schedule(source);
       });
     }
 
-    attach();
-    const observer = new MutationObserver(() => attach());
+    sync();
+    let syncTimer = 0;
+    const observer = new MutationObserver(() => {
+      window.clearTimeout(syncTimer);
+      syncTimer = window.setTimeout(sync, 25);
+    });
     observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
+
+    return () => {
+      window.clearTimeout(syncTimer);
+      observer.disconnect();
+    };
   }, []);
 
   return null;
