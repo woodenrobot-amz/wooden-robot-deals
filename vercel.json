@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "env": {
+    "CLOUDFLARE_PAGE_REWRITE_MODEL": "@cf/google/gemma-4-26b-a4b-it"
+  }
+}
