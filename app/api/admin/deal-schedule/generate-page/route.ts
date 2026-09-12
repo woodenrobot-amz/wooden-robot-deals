@@ -52,6 +52,20 @@ function extractCloudflareText(payload: unknown) {
   return "";
 }
 
+function cloudflareEmptyReason(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "unknown response shape";
+  const envelope = payload as {
+    result?: { choices?: Array<{ finish_reason?: string; message?: { reasoning_content?: string } }> };
+    choices?: Array<{ finish_reason?: string; message?: { reasoning_content?: string } }>;
+  };
+  const choice = (envelope.result?.choices || envelope.choices || [])[0];
+  const details = [
+    choice?.finish_reason ? `finish_reason=${choice.finish_reason}` : null,
+    choice?.message?.reasoning_content ? `reasoning_chars=${choice.message.reasoning_content.length}` : null,
+  ].filter(Boolean);
+  return details.length ? details.join(", ") : "no text content in response";
+}
+
 const REWRITE_INSTRUCTIONS = `You write alternate Facebook Page copy for a woodworking-deals creator. The source is a post the same creator already wrote for a Facebook Group. Create another natural human reaction to the same deal rather than mechanically paraphrasing it.
 
 Hard rules:
@@ -86,7 +100,8 @@ async function rewritePostBody(sourceBody: string) {
           { role: "system", content: REWRITE_INSTRUCTIONS },
           { role: "user", content: `SOURCE GROUP POST:\n${sourceBody}` },
         ],
-        max_completion_tokens: 180,
+        max_completion_tokens: 700,
+        reasoning_effort: "low",
         temperature: 0.8,
       }),
     },
@@ -101,7 +116,7 @@ async function rewritePostBody(sourceBody: string) {
   }
 
   const rewritten = extractCloudflareText(payload);
-  if (!rewritten) throw new Error("Cloudflare Workers AI returned an empty Page rewrite.");
+  if (!rewritten) throw new Error(`Cloudflare Workers AI returned an empty Page rewrite (${cloudflareEmptyReason(payload)}).`);
   if (rewritten.length > 10000) throw new Error("Generated Page rewrite exceeded the post length limit.");
   return rewritten;
 }
@@ -176,7 +191,6 @@ export async function POST(request: Request) {
   const targetHours = shuffledDerangement(sourceHours);
   const now = new Date().toISOString();
 
-  // Do not delete the existing target plan until every rewrite succeeds.
   const existingIds = (targetItems || []).map((item) => item.id);
   if (existingIds.length) {
     const { error: commentsDeleteError } = await admin
@@ -202,32 +216,24 @@ export async function POST(request: Request) {
       comment_text: source.comment_text || "",
       asin: source.asin || null,
     };
-    return {
-      source,
-      rewrittenBody: rewrittenBodies[index],
-      comments,
-      targetHour: targetHours[index],
-      firstComment,
-    };
+    return { source, rewrittenBody: rewrittenBodies[index], comments, targetHour: targetHours[index], firstComment };
   });
 
   const { data: inserted, error: insertError } = await admin
     .from("deal_schedule_items")
-    .insert(
-      generated.map(({ rewrittenBody, targetHour, firstComment }) => ({
-        user_id: user.id,
-        posting_group_id: targetGroup.id,
-        schedule_date: scheduleDate,
-        schedule_hour: targetHour,
-        schedule_position: targetHour,
-        post_body: rewrittenBody,
-        comment_text: firstComment.comment_text,
-        asin: firstComment.asin,
-        status: "planned",
-        posted_at: null,
-        updated_at: now,
-      })),
-    )
+    .insert(generated.map(({ rewrittenBody, targetHour, firstComment }) => ({
+      user_id: user.id,
+      posting_group_id: targetGroup.id,
+      schedule_date: scheduleDate,
+      schedule_hour: targetHour,
+      schedule_position: targetHour,
+      post_body: rewrittenBody,
+      comment_text: firstComment.comment_text,
+      asin: firstComment.asin,
+      status: "planned",
+      posted_at: null,
+      updated_at: now,
+    })))
     .select("id, schedule_hour");
   if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
 
@@ -244,7 +250,6 @@ export async function POST(request: Request) {
       schedule_item_id: scheduleItemId,
       user_id: user.id,
       position: comment.position,
-      // Protected path: comments never enter the LLM request and are copied verbatim.
       comment_text: comment.comment_text,
       asin: comment.asin,
       updated_at: now,
@@ -258,10 +263,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     generated: generated.length,
-    mappings: generated.map(({ source, targetHour }) => ({
-      sourceHour: source.schedule_hour ?? source.schedule_position,
-      targetHour,
-    })),
+    mappings: generated.map(({ source, targetHour }) => ({ sourceHour: source.schedule_hour ?? source.schedule_position, targetHour })),
     bodyMode: "llm-rewritten",
     provider: "cloudflare-workers-ai",
     model: CLOUDFLARE_MODEL,
