@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { DealScheduleBoard } from "./deal-schedule-board";
 import { GeneratePageButton } from "./generate-page-button";
 import { UnplannedPostTracker } from "./unplanned-post-tracker";
+import { CommentLinkPreviews } from "./comment-link-previews";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { dateInEasternTime, isScheduleDate } from "@/lib/deal-schedule";
@@ -62,6 +63,7 @@ export default async function DealSchedulePage({
         <UnplannedPostTracker />
         <GeneratePageButton scheduleDate={date} />
         <DealScheduleBoard initialDate={date} initialGroups={groups} initialItems={items} />
+        <CommentLinkPreviews />
       </div>
     </main>
   );
