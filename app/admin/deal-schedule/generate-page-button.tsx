@@ -17,7 +17,7 @@ export function GeneratePageButton({ scheduleDate }: { scheduleDate: string }) {
       });
       const data = (await response.json()) as { generated?: number; error?: string };
       if (!response.ok) throw new Error(data.error || "Could not generate Page posts.");
-      setMessage(`${data.generated || 0} Page posts generated. Bodies are copied for Phase 1; comments are preserved exactly.`);
+      setMessage(`${data.generated || 0} Page posts generated with alternate copy. Comments are preserved exactly.`);
       window.setTimeout(() => window.location.reload(), 700);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not generate Page posts.");
@@ -30,7 +30,7 @@ export function GeneratePageButton({ scheduleDate }: { scheduleDate: string }) {
     <div className="mt-4 flex flex-col gap-2 rounded-2xl border border-rose-400/20 bg-rose-400/5 p-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <p className="text-sm font-bold text-white">Woodworking Page</p>
-        <p className="text-xs text-zinc-400">Phase 1 shuffles populated Woodworking hours and copies comments exactly. Post bodies are copied until the rewrite step is added.</p>
+        <p className="text-xs text-zinc-400">Shuffles populated Woodworking hours, creates alternate Page copy, and preserves comments exactly.</p>
         {message ? <p className="mt-1 text-xs font-semibold text-rose-200">{message}</p> : null}
       </div>
       <button
