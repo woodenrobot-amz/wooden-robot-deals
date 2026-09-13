@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { dateInEasternTime, type PostingGroup, type ScheduleItem } from "@/lib/deal-schedule";
 import { DealScheduleBoard } from "./deal-schedule-board";
+import { GeneratePageButton } from "./generate-page-button";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,7 @@ export default async function DealSchedulePage({
   return (
     <main className="min-h-screen w-full bg-[#090b10] px-3 pb-24 pt-4 text-zinc-100 sm:px-6 sm:pt-6">
       <div className="mx-auto max-w-7xl">
+        <GeneratePageButton scheduleDate={selectedDate} />
         <DealScheduleBoard
           initialDate={selectedDate}
           initialGroups={(groups || []) as PostingGroup[]}
