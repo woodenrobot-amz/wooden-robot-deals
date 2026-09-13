@@ -37,21 +37,25 @@ export default async function DealSchedulePage({
 
   if (groupsError || itemsError) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-8 text-zinc-100 sm:px-6">
-        <div className="rounded-2xl border border-red-900/50 bg-red-950/30 p-5 text-sm text-red-200">
-          Could not load Posting Desk. {groupsError?.message || itemsError?.message}
+      <main className="min-h-screen w-full bg-[#090b10] px-4 py-8 text-zinc-100 sm:px-6">
+        <div className="mx-auto max-w-6xl">
+          <div className="rounded-2xl border border-red-900/50 bg-red-950/30 p-5 text-sm text-red-200">
+            Could not load Posting Desk. {groupsError?.message || itemsError?.message}
+          </div>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-3 pb-24 pt-4 text-zinc-100 sm:px-6 sm:pt-6">
-      <DealScheduleBoard
-        initialDate={selectedDate}
-        initialGroups={(groups || []) as PostingGroup[]}
-        initialItems={(items || []) as ScheduleItem[]}
-      />
+    <main className="min-h-screen w-full bg-[#090b10] px-3 pb-24 pt-4 text-zinc-100 sm:px-6 sm:pt-6">
+      <div className="mx-auto max-w-7xl">
+        <DealScheduleBoard
+          initialDate={selectedDate}
+          initialGroups={(groups || []) as PostingGroup[]}
+          initialItems={(items || []) as ScheduleItem[]}
+        />
+      </div>
     </main>
   );
 }
