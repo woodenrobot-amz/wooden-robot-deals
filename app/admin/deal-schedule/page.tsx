@@ -24,9 +24,9 @@ export default async function DealSchedulePage({
 
   const [{ data: groups, error: groupsError }, { data: items, error: itemsError }] = await Promise.all([
     supabase
-      .from("posting_groups")
-      .select("id, slug, name, schedule_type, accent, sort_order, active, tracks_post_events")
-      .eq("active", true)
+      .from("deal_posting_groups")
+      .select("id, slug, name, schedule_type, accent, sort_order, is_active, tracks_post_events")
+      .eq("is_active", true)
       .order("sort_order", { ascending: true }),
     supabase
       .from("deal_schedule_items")
