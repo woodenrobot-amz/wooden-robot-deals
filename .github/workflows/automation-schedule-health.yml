@@ -62,8 +62,11 @@ jobs:
               {
                   "name": "Candidate Enrichment",
                   "file": "enrichment.tsv",
-                  # Allow two hours of GitHub scheduling delay in the 26-hour window.
-                  "recent_expected": 22,
+                  # GitHub scheduled Actions are best-effort and this hourly workflow
+                  # has historically been delivered about 5-8 times per 26 hours.
+                  # Alert on a material outage instead of treating dropped/delayed
+                  # hourly cron deliveries as an application failure.
+                  "recent_expected": 5,
               },
               {
                   "name": "Live Deal Lifecycle",
