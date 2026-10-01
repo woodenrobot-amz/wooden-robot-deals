@@ -62,11 +62,11 @@ jobs:
               {
                   "name": "Candidate Enrichment",
                   "file": "enrichment.tsv",
-                  # GitHub scheduled Actions are best-effort and this hourly workflow
-                  # has historically been delivered about 5-8 times per 26 hours.
-                  # Alert on a material outage instead of treating dropped/delayed
-                  # hourly cron deliveries as an application failure.
-                  "recent_expected": 5,
+                  # GitHub scheduled Actions are best-effort; the September 28
+                  # audit observed only four scheduled deliveries in 26 hours.
+                  # Use that observed operational floor while continuing to flag
+                  # failed/cancelled runs and fewer than four deliveries.
+                  "recent_expected": 4,
               },
               {
                   "name": "Live Deal Lifecycle",
