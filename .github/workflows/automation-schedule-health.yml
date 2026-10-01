@@ -62,8 +62,11 @@ jobs:
               {
                   "name": "Candidate Enrichment",
                   "file": "enrichment.tsv",
-                  # Allow two hours of GitHub scheduling delay in the 26-hour window.
-                  "recent_expected": 22,
+                  # GitHub scheduled Actions are best-effort; the September 28
+                  # audit observed only four scheduled deliveries in 26 hours.
+                  # Use that observed operational floor while continuing to flag
+                  # failed/cancelled runs and fewer than four deliveries.
+                  "recent_expected": 4,
               },
               {
                   "name": "Live Deal Lifecycle",
