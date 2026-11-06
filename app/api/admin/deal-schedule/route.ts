@@ -111,6 +111,7 @@ export async function GET(request: Request) {
       .from("deal_posting_groups")
       .select("id, name, slug, accent, sort_order, schedule_type, tracks_post_events")
       .eq("is_active", true)
+      .neq("slug", "woodworking-page")
       .order("sort_order")
       .order("name"),
     admin
@@ -182,6 +183,7 @@ export async function PUT(request: Request) {
     .select("id, slug, schedule_type, tracks_post_events")
     .eq("id", postingGroupId)
     .eq("is_active", true)
+    .neq("slug", "woodworking-page")
     .maybeSingle();
 
   if (groupResult.error) return NextResponse.json({ error: groupResult.error.message }, { status: 500 });
