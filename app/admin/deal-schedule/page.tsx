@@ -28,7 +28,7 @@ export default async function DealSchedulePage({
       .select("id, slug, name, schedule_type, accent, sort_order, is_active, tracks_post_events")
       .eq("is_active", true)
       .neq("slug", "woodworking-page")
-      .order("sort_order", { ascending: true }),
+      .order("sort_order").order("name"),
     supabase
       .from("deal_schedule_items")
       .select("*, deal_schedule_comments(*)")

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { PostingReminder } from "./posting-reminder";
 import {
   dateInEasternTime,
   formatScheduleHour,
@@ -203,6 +204,9 @@ export function DealScheduleBoard({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [expandedPostedKeys, setExpandedPostedKeys] = useState<Set<string>>(() => new Set());
   const [notice, setNotice] = useState("");
+  const [tabName, setTabName] = useState("");
+  const [addingTab, setAddingTab] = useState(false);
+  const [reminderRevision, setReminderRevision] = useState(0);
 
   useEffect(() => {
     const savedMode = window.localStorage.getItem("dealSchedule.viewMode") as ViewMode | null;
@@ -212,8 +216,8 @@ export function DealScheduleBoard({
   }, []);
 
   const activeGroup = groups.find((group) => group.id === activeGroupId) || groups[0];
-  const activeItems = items.filter((item) => item.posting_group_id === activeGroup.id);
-  const activePositions = slotPositions(activeGroup, items, sequenceCounts[activeGroup.id]);
+  const activeItems = items.filter((item) => item.posting_group_id === activeGroup?.id);
+  const activePositions = activeGroup ? slotPositions(activeGroup, items, sequenceCounts[activeGroup.id]) : [];
   const scheduledCount = activePositions.filter((position) => {
     const draft = drafts[keyFor(activeGroup.id, position)] || emptyDraft();
     return draft.postBody || draft.comments.some((comment) => comment.commentText || comment.asin);
@@ -320,6 +324,29 @@ export function DealScheduleBoard({
     }
   }
 
+  async function addTab(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAddingTab(true);
+    setNotice("");
+    try {
+      const response = await fetch("/api/admin/deal-schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: tabName }),
+      });
+      const data = (await response.json()) as { group: PostingGroup; error?: string };
+      if (!response.ok) throw new Error(data.error || "Could not add the tab.");
+      setGroups((current) => [...current, data.group]);
+      setActiveGroupId(data.group.id);
+      setTabName("");
+      setNotice(`${data.group.name} tab added.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not add the tab.");
+    } finally {
+      setAddingTab(false);
+    }
+  }
+
   async function saveSlot(groupId: string, position: number, statusOverride?: ScheduleStatus) {
     const key = keyFor(groupId, position);
     const draft = drafts[key] || emptyDraft();
@@ -363,6 +390,7 @@ export function DealScheduleBoard({
           return next;
         });
       }
+      if (statusOverride) setReminderRevision((current) => current + 1);
       const label = slotLabel(group, position);
       setNotice(data.item ? `${label} saved.` : `${label} cleared.`);
     } catch (error) {
@@ -431,6 +459,7 @@ export function DealScheduleBoard({
               <input type="date" value={date} onChange={(event) => loadDate(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-base font-semibold text-white sm:w-auto sm:text-sm" />
             </label>
           </div>
+          <PostingReminder revision={reminderRevision} />
         </div>
 
         <div className="overflow-x-auto border-t border-zinc-800 bg-zinc-950/40 px-3 pt-3 sm:px-6">
@@ -445,6 +474,18 @@ export function DealScheduleBoard({
             })}
           </div>
         </div>
+        <details className="border-t border-zinc-800 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-300 sm:px-6">
+          <summary className="cursor-pointer py-2 font-semibold">Add tab</summary>
+          <form onSubmit={addTab} className="flex flex-wrap items-center gap-2 pb-2">
+            <input aria-label="Tab name" placeholder="Tab name" value={tabName} maxLength={80} required
+              onChange={(event) => setTabName(event.target.value)}
+              className="min-h-11 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-white" />
+            <button type="submit" disabled={addingTab || loading || !tabName.trim()}
+              className="min-h-11 rounded-lg bg-zinc-800 px-3 font-semibold disabled:opacity-50">
+              {addingTab ? "Adding…" : "Add"}
+            </button>
+          </form>
+        </details>
       </header>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 px-4 py-3 text-sm">

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getAmazonItems, type AmazonPublicItem } from "@/lib/amazon-creators";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -112,6 +113,7 @@ export async function GET(request: Request) {
       .select("id, name, slug, accent, sort_order, schedule_type, tracks_post_events")
       .eq("is_active", true)
       .neq("slug", "woodworking-page")
+      .or(`owner_id.is.null,owner_id.eq.${user.id}`)
       .order("sort_order")
       .order("name"),
     admin
@@ -133,6 +135,39 @@ export async function GET(request: Request) {
   }));
 
   return NextResponse.json({ groups: groupsResult.data || [], items });
+}
+
+export async function POST(request: Request) {
+  const user = await authenticatedUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await request.json().catch(() => null);
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  if (!name || name.length > 80) {
+    return NextResponse.json({ error: "Enter a tab name between 1 and 80 characters." }, { status: 400 });
+  }
+
+  const admin = createAdminClient();
+  const { data: shared, error: lookupError } = await admin
+    .from("deal_posting_groups")
+    .select("name")
+    .eq("is_active", true)
+    .is("owner_id", null);
+  if (lookupError) return NextResponse.json({ error: "Could not check tab names." }, { status: 500 });
+  if (shared.some((group) => group.name.toLowerCase() === name.toLowerCase())) {
+    return NextResponse.json({ error: "A tab with that name already exists." }, { status: 409 });
+  }
+
+  const { data: group, error } = await admin
+    .from("deal_posting_groups")
+    .insert({ name, slug: `custom-${randomUUID()}`, owner_id: user.id, accent: "violet", sort_order: 40 })
+    .select("id, name, slug, accent, sort_order, schedule_type, tracks_post_events")
+    .single();
+  if (error?.code === "23505") {
+    return NextResponse.json({ error: "A tab with that name already exists." }, { status: 409 });
+  }
+  if (error) return NextResponse.json({ error: "Could not add the tab." }, { status: 500 });
+  return NextResponse.json({ group }, { status: 201 });
 }
 
 export async function PUT(request: Request) {
@@ -184,6 +219,7 @@ export async function PUT(request: Request) {
     .eq("id", postingGroupId)
     .eq("is_active", true)
     .neq("slug", "woodworking-page")
+    .or(`owner_id.is.null,owner_id.eq.${user.id}`)
     .maybeSingle();
 
   if (groupResult.error) return NextResponse.json({ error: groupResult.error.message }, { status: 500 });
