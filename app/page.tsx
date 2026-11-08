@@ -14,7 +14,7 @@ export default async function Home() {
   const supabase = createAdminClient();
   const { data: deals, error } = await supabase
     .from("deals")
-    .select("id, asin, title, brand, category_id, current_price, deal_score, badges, amazon_url, image_url, created_at, expires_at, source, scoring_components")
+    .select("id, asin, title, brand, category_id, current_price, deal_score, badges, amazon_url, image_url, created_at, scoring_components")
     .eq("status", "active")
     .gt("expires_at", now)
     .order("created_at", { ascending: false })
