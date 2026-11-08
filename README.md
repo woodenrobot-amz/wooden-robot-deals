@@ -85,8 +85,9 @@ public Deals experience and the authenticated Posting Desk as distinct PWAs:
    redirects to `/admin/deal-schedule`, and its root-scoped manifest includes
    `/login` and `/auth/callback` in the installed application's navigation
    scope.
-3. Configure the existing Supabase and server-side secrets independently on
-   both projects. Add each project's callback URL to the Supabase authentication
+3. Configure Supabase and the required server-side secrets on both projects.
+   Posting Desk uses the public Deals project's live Amazon lookup when it has
+   no Amazon credential pair of its own. Add each project's callback URL to the Supabase authentication
    redirect allow list; for the admin project that is
    `https://<admin-domain>/auth/callback`.
 

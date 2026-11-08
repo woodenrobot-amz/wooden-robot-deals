@@ -1,3 +1,5 @@
+import { isAdminSurface } from "./app-surface";
+
 type CachedAmazonToken = {
   accessToken: string;
   expiresAt: number;
@@ -110,6 +112,27 @@ export async function getAmazonItems(
 
   if (cleanAsins.length === 0) {
     return [];
+  }
+
+  // The public Deals project owns the Amazon credentials for the split deployment.
+  if (isAdminSurface && (!process.env.AMAZON_CREDENTIAL_ID || !process.env.AMAZON_SECRET)) {
+    const response = await fetch("https://wooden-robot-deals.vercel.app/api/amazon/get-items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ asins: cleanAsins }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Deals app Amazon lookup failed: ${response.status}`);
+    }
+
+    const { items } = await response.json();
+    if (!Array.isArray(items)) {
+      throw new Error("Deals app Amazon lookup returned an invalid response");
+    }
+    return items;
   }
 
   const accessToken = await getAmazonAccessToken();
