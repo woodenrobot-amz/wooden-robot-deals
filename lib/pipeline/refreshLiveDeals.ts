@@ -2,6 +2,7 @@ import "server-only";
 
 import { getAmazonItems, type AmazonPublicItem } from "@/lib/amazon-creators";
 import { FEED_DEAL_LIFETIME_MS, FEED_HUB_SOURCE, PUBLIC_DEAL_LIMIT } from "@/lib/public-feed";
+import { scoreDeal } from "@/lib/scoring";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const AMAZON_BATCH_SIZE = 10;
@@ -32,20 +33,6 @@ function toRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function getDiscountScore(discountPercent: number) {
-  if (discountPercent >= 40) return 35;
-  if (discountPercent >= 30) return 30;
-  if (discountPercent >= 20) return 24;
-  if (discountPercent >= 15) return 18;
-  if (discountPercent >= 10) return 12;
-  if (discountPercent >= 5) return 6;
-  return 0;
-}
-
-function clampScore(score: number) {
-  return Math.max(0, Math.min(100, Math.round(score)));
 }
 
 function isExplicitlyUnavailable(availability: string | null) {
@@ -195,30 +182,22 @@ export async function refreshLiveDeals() {
       continue;
     }
 
-    const avg90Price = Number(deal.avg_90_price || 0);
-    const discountPercent =
-      avg90Price > 0 && currentPrice < avg90Price
-        ? ((avg90Price - currentPrice) / avg90Price) * 100
-        : 0;
-    const discountScore = getDiscountScore(discountPercent);
     const oldComponents = toRecord(deal.scoring_components);
+    const scoring = scoreDeal({
+      currentPrice,
+      avg90Price: Number(deal.avg_90_price) || null,
+      brandBonus: Number(oldComponents.brandScore),
+    });
     const scoringComponents = {
       ...oldComponents,
-      discountPercent: Math.round(discountPercent * 10) / 10,
-      discountScore,
+      ...scoring.components,
       lifecycle: { checkedAt, outcome: "refreshed", reason: null, ...(renews ? { referencePrice } : {}) },
     };
-    const dealScore = clampScore(
-      discountScore +
-        Number(oldComponents.brandScore || 0) +
-        Number(oldComponents.demandScore || 0) +
-        Number(oldComponents.confidenceScore || 0),
-    );
-    const badges = new Set<string>(deal.badges || []);
-    badges.delete("Huge Discount");
-    badges.delete("All Time Low");
-    if (discountPercent >= 20) badges.add("Huge Discount");
-    if (discountPercent >= 35) badges.add("All Time Low");
+    const dealScore = scoring.totalScore ?? 0;
+    const badges = new Set((deal.badges || []).filter(
+      (badge) => badge !== "Huge Discount" && badge !== "All Time Low",
+    ));
+    for (const badge of scoring.badges) badges.add(badge);
 
     const renewedExpiry = new Date(Math.max(Date.parse(deal.expires_at), renewedThrough));
     const { error: updateError } = await supabase

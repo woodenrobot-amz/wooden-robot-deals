@@ -13,7 +13,7 @@ type DealPreview = {
   current_price: number;
   live_price_verified: boolean;
   avg_90_price: number | null;
-  deal_score: number;
+  deal_score: number | null;
   badges: string[];
   scoring_components: Record<string, unknown>;
 };
@@ -100,7 +100,7 @@ export function AsinQuickImport() {
           amazon_url: deal.amazon_url,
           current_price: deal.current_price,
           avg_90_price: deal.avg_90_price,
-          deal_score: deal.deal_score,
+          deal_score: deal.deal_score ?? 0,
           badges: deal.badges,
           scoring_components: {
             ...deal.scoring_components,
@@ -173,7 +173,9 @@ export function AsinQuickImport() {
                 <p className="mt-1 text-sm text-zinc-400">{card.deal.brand} · {card.asin}</p>
                 <p className="mt-2 text-sm">
                   {card.deal.live_price_verified ? `$${card.deal.current_price.toFixed(2)} · ` : ""}
-                  Score {card.deal.deal_score}
+                  {card.deal.deal_score != null
+                    ? `Score ${card.deal.deal_score}`
+                    : Number(card.deal.avg_90_price) > 0 ? "No current price" : "No 90-day average"}
                 </p>
                 <label className="mt-3 flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={card.selected}

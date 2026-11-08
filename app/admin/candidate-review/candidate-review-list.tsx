@@ -1,13 +1,10 @@
 "use client";
 
+import { scoreDeal } from "@/lib/scoring";
 import { useMemo, useState } from "react";
 
 type ScoreComponents = {
-  discountPercent?: number;
-  discountScore?: number;
   brandScore?: number;
-  demandScore?: number;
-  confidenceScore?: number;
   shippingCheck?: {
     amazonPrice?: number | null;
     keepaLandedPrice?: number | null;
@@ -26,10 +23,10 @@ type Enrichment = {
   keepa_url: string;
   current_price: number | null;
   avg_90_price: number | null;
-  deal_score: number;
   badges?: string[];
   scoring_components?: ScoreComponents;
   brand_tier?: string;
+  brand_bonus?: number;
   rating?: number | null;
   review_count?: number | null;
   sales_rank?: number | null;
@@ -90,25 +87,24 @@ export function CandidateReviewList({
 
   const visible = useMemo(
     () =>
-      candidates
-        .filter((candidate) => {
-          const deal = candidate.raw_data?.enrichment;
-          if (!deal) return false;
-          const haystack = `${deal.title} ${deal.brand} ${deal.asin}`.toLowerCase();
-          return (
-            haystack.includes(search.toLowerCase()) &&
-            (category === "all" || candidate.category_id === category) &&
-            (decision === "all" ||
-              (decision === "pending" && candidate.status === "enriched") ||
-              candidate.status === decision) &&
-            deal.deal_score >= minScore
-          );
-        })
-        .sort(
-          (left, right) =>
-            (right.raw_data?.enrichment?.deal_score || 0) -
-            (left.raw_data?.enrichment?.deal_score || 0),
-        ),
+      candidates.flatMap((candidate) => {
+        const deal = candidate.raw_data?.enrichment;
+        if (!deal) return [];
+        const haystack = `${deal.title} ${deal.brand} ${deal.asin}`.toLowerCase();
+        if (
+          !haystack.includes(search.toLowerCase()) ||
+          (category !== "all" && candidate.category_id !== category) ||
+          (decision !== "all" && candidate.status !== (decision === "pending" ? "enriched" : decision))
+        ) return [];
+
+        const scoring = scoreDeal({
+          currentPrice: deal.current_price,
+          avg90Price: deal.avg_90_price,
+          brandBonus: deal.brand_bonus ?? deal.scoring_components?.brandScore,
+        });
+        if (minScore > 0 && (scoring.totalScore ?? -1) < minScore) return [];
+        return [{ candidate, deal, scoring }];
+      }).sort((left, right) => (right.scoring.totalScore ?? -1) - (left.scoring.totalScore ?? -1)),
     [candidates, category, decision, minScore, search],
   );
   const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
@@ -214,11 +210,9 @@ export function CandidateReviewList({
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        {pagedCandidates.map((candidate) => {
-          const deal = candidate.raw_data?.enrichment;
-          if (!deal) return null;
+        {pagedCandidates.map(({ candidate, deal, scoring }) => {
           const key = `${candidate.stream_id}:${candidate.asin}`;
-          const components = deal.scoring_components || {};
+          const { components, totalScore } = scoring;
 
           return (
             <article
@@ -255,9 +249,9 @@ export function CandidateReviewList({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-xs text-zinc-500">{deal.asin}</span>
-                    <div className={`rounded-xl px-3 py-2 text-center ${scoreColor(deal.deal_score)}`}>
+                    <div className={`rounded-xl px-3 py-2 text-center ${scoreColor(totalScore ?? 0)}`}>
                       <div className="text-[9px] font-bold uppercase">Score</div>
-                      <div className="text-2xl font-black leading-none">{deal.deal_score}</div>
+                      <div className="text-2xl font-black leading-none">{totalScore ?? "—"}</div>
                     </div>
                   </div>
                   <h2 className="mt-1 line-clamp-3 font-bold">{deal.title}</h2>
@@ -281,7 +275,7 @@ export function CandidateReviewList({
                 </div>
                 <div className="rounded-xl bg-zinc-950 p-2">
                   <div className="text-xs text-zinc-500">Discount</div>
-                  <div className="font-bold">{components.discountPercent ?? 0}%</div>
+                  <div className="font-bold">{components.discountPercent == null ? "—" : `${components.discountPercent}%`}</div>
                 </div>
                 <div className="rounded-xl bg-zinc-950 p-2">
                   <div className="text-xs text-zinc-500">Rating</div>
@@ -324,10 +318,14 @@ export function CandidateReviewList({
               <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-400">
                 <span>Reviews: {deal.review_count?.toLocaleString() ?? "—"}</span>
                 <span>Rank: {deal.sales_rank?.toLocaleString() ?? "—"}</span>
-                <span>Brand: +{components.brandScore ?? 0}</span>
-                <span>Discount: +{components.discountScore ?? 0}</span>
-                <span>Demand: +{components.demandScore ?? 0}</span>
-                <span>Confidence: +{components.confidenceScore ?? 0}</span>
+                {totalScore == null ? (
+                  <span>{deal.avg_90_price && deal.avg_90_price > 0 ? "No current price" : "No 90-day average"}</span>
+                ) : (
+                  <>
+                    <span>Beans: +{components.brandScore}</span>
+                    <span>Discount: +{components.discountScore}</span>
+                  </>
+                )}
               </div>
 
               <div className="mt-3 flex gap-4 text-sm">

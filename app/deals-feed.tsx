@@ -16,7 +16,8 @@ type Deal = {
   image_url: string | null;
   created_at: string;
   scoring_components?: {
-    discountPercent?: number;
+    discountPercent?: number | null;
+    discountScore?: number | null;
     lifecycle?: { checkedAt?: string };
     editorial?: { featured?: boolean };
   } | null;
@@ -91,7 +92,11 @@ export function DealsFeed({ deals, now }: { deals: Deal[]; now: number }) {
       .sort((a, b) => {
         const featureOrder = Number(b.scoring_components?.editorial?.featured === true) - Number(a.scoring_components?.editorial?.featured === true);
         if (featureOrder) return featureOrder;
-        if (sort === "score") return b.deal_score - a.deal_score;
+        if (sort === "score") {
+          const scoreA = a.scoring_components?.discountScore === null ? -1 : a.deal_score;
+          const scoreB = b.scoring_components?.discountScore === null ? -1 : b.deal_score;
+          return scoreB - scoreA;
+        }
         if (sort === "discount") {
           return (b.scoring_components?.discountPercent || 0) - (a.scoring_components?.discountPercent || 0);
         }
@@ -191,7 +196,7 @@ export function DealsFeed({ deals, now }: { deals: Deal[]; now: number }) {
                     </div>
                     <div className="shrink-0 rounded-xl border border-amber-400/50 bg-amber-400/15 px-3 py-2 text-center text-amber-300">
                       <p className="text-xs font-bold uppercase tracking-wide">Deal score</p>
-                      <p className="text-2xl font-black leading-tight">{deal.deal_score}</p>
+                      <p className="text-2xl font-black leading-tight">{deal.scoring_components?.discountScore === null ? "—" : deal.deal_score}</p>
                     </div>
                   </div>
 

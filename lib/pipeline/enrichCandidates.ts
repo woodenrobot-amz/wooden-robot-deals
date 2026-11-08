@@ -252,16 +252,10 @@ export async function enrichCandidateQueue(requestedLimit?: number) {
     const salesRank = Number(product?.stats?.current?.[3]);
 
     const scoring = scoreDeal({
-      brand,
       brandTier,
       brandBonus,
       currentPrice,
       avg90Price,
-      rating: keepaDemand.rating,
-      reviewCount: keepaDemand.reviewCount,
-      salesRank: Number.isFinite(salesRank) && salesRank > 0 ? salesRank : null,
-      hasImage: Boolean(imageUrl),
-      hasTitle: Boolean(title),
     });
 
     const enrichment = {

@@ -9,6 +9,7 @@ type AdminDeal = {
   image_url: string | null; status: string; source: string | null; created_at: string;
   expires_at: string; candidate_history: CandidateHistory[];
   scoring_components: {
+    discountScore?: number | null;
     discountPercent?: number;
     lifecycle?: { checkedAt?: string; outcome?: string; reason?: string | null };
     editorial?: { featured?: boolean; updatedAt?: string; updatedBy?: string };
@@ -105,7 +106,7 @@ export function AdminDealList({ initialDeals, categories }: { initialDeals: Admi
             <div className="flex gap-4">
               <div className="h-24 w-24 shrink-0 rounded-xl bg-white p-2">{deal.image_url && <img src={deal.image_url} alt={deal.title} className="h-full w-full object-contain" />}</div>
               <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500"><span>{deal.asin}</span>{featured && <span className="rounded-full bg-amber-400 px-2 py-1 font-bold text-zinc-950">Featured</span>}<span>Score {deal.deal_score}</span></div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500"><span>{deal.asin}</span>{featured && <span className="rounded-full bg-amber-400 px-2 py-1 font-bold text-zinc-950">Featured</span>}<span>{deal.scoring_components?.discountScore === null ? "Unscored" : `Score ${deal.deal_score}`}</span></div>
                 <h3 className="mt-1 font-bold leading-snug">{deal.title}</h3>
                 <p className="mt-1 text-sm text-zinc-400">{deal.brand || "Unknown brand"} · ${deal.current_price ?? "—"}</p>
                 <p className="mt-2 text-xs text-zinc-500">Published {new Date(deal.created_at).toLocaleString()} · Expires {new Date(deal.expires_at).toLocaleString()}</p>
