@@ -1,3 +1,5 @@
+import { brandTierOptions } from "@/lib/brand-tier-options";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { BrandTable } from "./brand-table";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -10,22 +12,14 @@ async function addBrandTier(formData: FormData) {
   const supabase = await createClient();
 
   const name = String(formData.get("name") || "").trim();
-  const tier = String(formData.get("tier") || "standard");
-  const scoreBonusByTier: Record<string, number> = {
-    elite: 15,
-    strong: 10,
-    standard: 5,
-    unrated: 0,
-  };
+  const tier = brandTierOptions.find((option) => option.value === formData.get("tier"));
 
-  const scoreBonus = scoreBonusByTier[tier] ?? 0;
-
-  if (!name) return;
+  if (!name || !tier) return;
 
   const { error } = await supabase.from("brand_tiers").insert({
     name,
-    tier,
-    score_bonus: scoreBonus,
+    tier: tier.value,
+    score_bonus: tier.bonus,
   });
 
   if (error) {
@@ -33,7 +27,36 @@ async function addBrandTier(formData: FormData) {
     return;
   }
 
-  revalidatePath("/admin/brands");
+  revalidatePath("/admin/brand-tiers");
+}
+
+async function updateBrandTier(_state: string, formData: FormData) {
+  "use server";
+
+  const id = String(formData.get("id") || "");
+  const tier = brandTierOptions.find((option) => option.value === formData.get("tier"));
+  if (!id || !tier) return "Choose a valid tier.";
+
+  // The existing admin-only SELECT policy authorizes access to this brand.
+  const supabase = await createClient();
+  const { data: brand, error: readError } = await supabase
+    .from("brand_tiers").select("id").eq("id", id).maybeSingle();
+  if (readError || !brand) return "This brand is unavailable to edit.";
+
+  const { data: updated, error } = await createAdminClient()
+    .from("brand_tiers")
+    .update({ tier: tier.value, score_bonus: tier.bonus })
+    .eq("id", brand.id)
+    .select("id")
+    .maybeSingle();
+  if (error || !updated) {
+    console.error("Failed to update brand tier:", error);
+    return "Could not save the tier. Try again.";
+  }
+
+  revalidatePath("/admin/brand-tiers");
+  revalidatePath("/admin/candidate-review");
+  return "";
 }
 
 export default async function BrandTiersPage() {
@@ -67,7 +90,7 @@ export default async function BrandTiersPage() {
           <h1 className="mt-2 text-3xl font-bold">Brand Tiers</h1>
 
           <p className="mt-3 text-sm text-zinc-400">
-            Add brands and assign scoring tiers.
+            Add brands and change their scoring tiers.
           </p>
 
           <form
@@ -86,10 +109,9 @@ export default async function BrandTiersPage() {
               defaultValue="standard"
               className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-white outline-none"
             >
-              <option value="elite">Elite</option>
-              <option value="strong">Strong</option>
-              <option value="standard">Standard</option>
-              <option value="unrated">Unrated</option>
+              {brandTierOptions.map(({ value, label }) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
             </select>
 
             <button
@@ -107,7 +129,7 @@ export default async function BrandTiersPage() {
           )}
 
           <div className="mt-6">
-            <BrandTable brands={brands || []} />
+            <BrandTable brands={brands || []} updateBrandTier={updateBrandTier} />
           </div>
         </div>
       </div>

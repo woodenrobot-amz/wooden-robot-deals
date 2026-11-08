@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getBrandTierMap, normalizeBrandName } from "@/lib/brandTiers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   CandidateReviewList,
@@ -64,11 +65,20 @@ export default async function CandidateReviewPage() {
   const liveAsins = new Set(
     liveDeals.map((deal) => deal.asin),
   );
-  const reviewCandidates = candidates.map((candidate) => ({
-    ...candidate,
-    status: liveAsins.has(candidate.asin) ? ("published" as const) : candidate.status,
-    is_live: liveAsins.has(candidate.asin),
-  }));
+  const brandTiers = await getBrandTierMap();
+  const reviewCandidates = candidates.map((candidate) => {
+    const enrichment = candidate.raw_data?.enrichment;
+    const brandTier = brandTiers.get(normalizeBrandName(enrichment?.brand));
+    return {
+      ...candidate,
+      raw_data: enrichment && brandTier ? {
+        ...candidate.raw_data,
+        enrichment: { ...enrichment, brand_tier: brandTier.tier, brand_bonus: brandTier.score_bonus },
+      } : candidate.raw_data,
+      status: liveAsins.has(candidate.asin) ? ("published" as const) : candidate.status,
+      is_live: liveAsins.has(candidate.asin),
+    };
+  });
 
   return (
     <main className="min-h-screen bg-zinc-950 px-4 py-8 text-white">

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
+import { brandTierOptions } from "@/lib/brand-tier-options";
 
 type Brand = {
   id: string;
@@ -11,7 +12,48 @@ type Brand = {
 
 type SortKey = "name" | "tier" | "score_bonus";
 
-export function BrandTable({ brands }: { brands: Brand[] }) {
+type UpdateBrandTier = (state: string, formData: FormData) => Promise<string>;
+
+function TierEditor({ brand, updateBrandTier }: { brand: Brand; updateBrandTier: UpdateBrandTier }) {
+  const [tier, setTier] = useState(brand.tier);
+  const [error, saveTier, pending] = useActionState(updateBrandTier, "");
+
+  return (
+    <form action={saveTier}>
+      <input type="hidden" name="id" value={brand.id} />
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          aria-label={`Tier for ${brand.name}`}
+          name="tier"
+          value={tier}
+          onChange={(event) => setTier(event.target.value)}
+          disabled={pending}
+          className="rounded-lg border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-white"
+        >
+          {!brandTierOptions.some((option) => option.value === brand.tier) && (
+            <option value={brand.tier} disabled>{brand.tier}</option>
+          )}
+          {brandTierOptions.map(({ value, label }) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          disabled={pending || tier === brand.tier}
+          className="rounded-lg bg-amber-400 px-2 py-1.5 font-bold text-zinc-950 disabled:opacity-50"
+        >
+          {pending ? "Saving…" : "Save"}
+        </button>
+      </div>
+      {error && <p role="alert" className="mt-1 text-xs text-red-300">{error}</p>}
+    </form>
+  );
+}
+
+export function BrandTable({ brands, updateBrandTier }: {
+  brands: Brand[];
+  updateBrandTier: UpdateBrandTier;
+}) {
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -111,7 +153,9 @@ export function BrandTable({ brands }: { brands: Brand[] }) {
                 <td className="px-4 py-3 font-medium text-zinc-100">
                   {brand.name}
                 </td>
-                <td className="px-4 py-3 text-zinc-300">{brand.tier}</td>
+                <td className="px-4 py-3 text-zinc-300">
+                  <TierEditor key={brand.tier} brand={brand} updateBrandTier={updateBrandTier} />
+                </td>
                 <td className="px-4 py-3 text-zinc-300">
                   +{brand.score_bonus}
                 </td>
