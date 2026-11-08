@@ -71,6 +71,7 @@ export function CandidateReviewList({
   const [decision, setDecision] = useState("pending");
   const [busyKey, setBusyKey] = useState("");
   const [message, setMessage] = useState("");
+  const [reviewError, setReviewError] = useState<{ key: string; message: string } | null>(null);
   const [page, setPage] = useState(1);
 
   const categories = useMemo(
@@ -119,21 +120,23 @@ export function CandidateReviewList({
     setBusyKey(key);
     setMessage("");
 
-    const response = await fetch("/api/admin/review-candidate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        asin: candidate.asin,
-        streamId: candidate.stream_id,
-        action,
-      }),
-    });
-    const result = (await response.json()) as { error?: string };
-
-    if (!response.ok) {
-      setMessage(result.error || "Candidate review failed.");
-      setBusyKey("");
+    setReviewError(null);
+    try {
+      const response = await fetch("/api/admin/review-candidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asin: candidate.asin, streamId: candidate.stream_id, action }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        setReviewError({ key, message: result?.error || "Candidate review failed. Try again." });
+        return;
+      }
+    } catch {
+      setReviewError({ key, message: "Could not reach the app. Check your connection and try again." });
       return;
+    } finally {
+      setBusyKey("");
     }
 
     setCandidates((current) =>
@@ -157,7 +160,6 @@ export function CandidateReviewList({
           ? `${candidate.asin} will never be published.`
           : `${candidate.asin} deferred for seven days.`,
     );
-    setBusyKey("");
   }
 
   return (
@@ -266,7 +268,7 @@ export function CandidateReviewList({
 
               <div className="mt-4 grid grid-cols-4 gap-2 text-center text-sm">
                 <div className="rounded-xl bg-zinc-950 p-2">
-                  <div className="text-xs text-zinc-500">Now</div>
+                  <div className="text-xs text-zinc-500">{deal.amazon_price != null ? "Saved Amazon" : "Saved price"}</div>
                   <div className="font-bold">{money(deal.current_price)}</div>
                 </div>
                 <div className="rounded-xl bg-zinc-950 p-2">
@@ -282,6 +284,16 @@ export function CandidateReviewList({
                   <div className="font-bold">{deal.rating ?? "—"}</div>
                 </div>
               </div>
+
+              {deal.current_price != null && deal.amazon_price == null && (
+                <p className="mt-2 text-xs text-amber-300">Amazon price unverified. Publish checks Amazon again.</p>
+              )}
+
+              {reviewError?.key === key && (
+                <p role="alert" className="mt-3 rounded-lg bg-amber-400/10 p-3 text-sm text-amber-300">
+                  {reviewError.message}
+                </p>
+              )}
 
               {deal.keepa_landed_price != null && (
                 <div className={`mt-3 rounded-xl border p-3 ${

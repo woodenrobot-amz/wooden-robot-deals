@@ -70,9 +70,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Amazon price check failed. Try publishing again." }, { status: 502 });
     }
 
-    const currentPrice = item?.currentPrice;
-    if (!currentPrice || currentPrice <= 0 || /unavailable|out of stock|not available/i.test(item?.availability || "")) {
-      return NextResponse.json({ error: "Amazon did not confirm an available price for this deal." }, { status: 409 });
+    if (!item) {
+      return NextResponse.json({ error: "Amazon’s API didn’t return this ASIN. The saved price can’t be verified." }, { status: 409 });
+    }
+
+    const currentPrice = item.currentPrice;
+    if (/unavailable|out of stock|not available/i.test(item.availability || "")) {
+      return NextResponse.json({ error: "Amazon reported this offer as unavailable." }, { status: 409 });
+    }
+    if (!currentPrice || currentPrice <= 0) {
+      return NextResponse.json({ error: "Amazon returned this ASIN without a current offer price." }, { status: 409 });
     }
 
     const checkedAt = new Date().toISOString();
