@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { PUBLIC_DEAL_LIMIT } from "@/lib/public-feed";
 import { DealsFeed } from "./deals-feed";
 import { redirect } from "next/navigation";
 import { isAdminSurface } from "@/lib/app-surface";
@@ -9,15 +10,16 @@ export const revalidate = 0;
 export default async function Home() {
   if (isAdminSurface) redirect("/admin/deal-schedule");
 
+  const now = new Date().toISOString();
   const supabase = createAdminClient();
   const { data: deals, error } = await supabase
     .from("deals")
-    .select("*, categories(name)")
+    .select("id, asin, title, brand, category_id, current_price, deal_score, badges, amazon_url, image_url, created_at, expires_at, source, scoring_components")
     .eq("status", "active")
-    .gt("expires_at", new Date().toISOString())
+    .gt("expires_at", now)
     .order("created_at", { ascending: false })
     .order("deal_score", { ascending: false })
-    .limit(100);
+    .limit(PUBLIC_DEAL_LIMIT);
 
   return (
     <main className="min-h-screen bg-zinc-950 text-white">
@@ -26,7 +28,7 @@ export default async function Home() {
           <p className="text-sm uppercase tracking-widest text-amber-400">
             Wooden Robot
           </p>
-          <h1 className="text-3xl font-bold">Top Deals</h1>
+          <h1 className="text-3xl font-bold">Deals</h1>
           <p className="mt-2 text-sm text-zinc-400">
             Curated deals for tools, garage, tech, EDC, and useful guy stuff.
           </p>
@@ -42,7 +44,7 @@ export default async function Home() {
           </div>
         )}
 
-        <DealsFeed deals={deals || []} />
+        <DealsFeed deals={deals || []} now={Date.parse(now)} />
       </div>
       <footer className="mx-auto max-w-3xl px-4 pb-6 text-xs text-zinc-500">
         <p>

@@ -1,5 +1,6 @@
 "use client";
 
+import { FEED_HUB_SOURCE, publicDealCategories, publicDealCategory } from "@/lib/public-feed";
 import { useEffect, useMemo, useState } from "react";
 
 type Deal = {
@@ -7,7 +8,6 @@ type Deal = {
   asin: string;
   title: string;
   brand: string | null;
-  brand_tier: string | null;
   category_id: string | null;
   current_price: number | null;
   deal_score: number;
@@ -16,12 +16,12 @@ type Deal = {
   image_url: string | null;
   created_at: string;
   expires_at: string;
+  source: string | null;
   scoring_components?: {
     discountPercent?: number;
     lifecycle?: { checkedAt?: string };
     editorial?: { featured?: boolean };
   } | null;
-  categories?: { name: string } | null;
 };
 
 type SortOption = "newest" | "score" | "discount";
@@ -71,8 +71,8 @@ function getAmazonFreshnessText(checkedAt?: string) {
   }).format(new Date(checkedAt))}`;
 }
 
-function getTiming(expiresAt: string) {
-  const diffMs = new Date(expiresAt).getTime() - Date.now();
+function getTiming(expiresAt: string, now: number) {
+  const diffMs = new Date(expiresAt).getTime() - now;
   if (diffMs <= 0) return { text: "Expired", urgent: true };
   const hours = Math.ceil(diffMs / 3_600_000);
   if (hours <= 6) return { text: `Ends in ${hours}h`, urgent: true };
@@ -81,11 +81,11 @@ function getTiming(expiresAt: string) {
   return { text: `Ends in ${days} day${days === 1 ? "" : "s"}`, urgent: false };
 }
 
-function isRecent(createdAt: string) {
-  return Date.now() - new Date(createdAt).getTime() <= 24 * 3_600_000;
+function isRecent(createdAt: string, now: number) {
+  return now - new Date(createdAt).getTime() <= 24 * 3_600_000;
 }
 
-export function DealsFeed({ deals }: { deals: Deal[] }) {
+export function DealsFeed({ deals, now }: { deals: Deal[]; now: number }) {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [view, setView] = useState<"all" | "saved">("all");
   const [sort, setSort] = useState<SortOption>("newest");
@@ -100,26 +100,13 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
     });
   }, []);
 
-  const categories = useMemo(
-    () =>
-      Array.from(
-        new Map(
-          deals.map((deal) => [
-            deal.category_id || "uncategorized",
-            deal.categories?.name || deal.category_id || "Uncategorized",
-          ]),
-        ),
-      ).sort((a, b) => a[1].localeCompare(b[1])),
-    [deals],
-  );
-
   const visibleDeals = useMemo(() => {
     const query = search.trim().toLowerCase();
     return deals
       .filter((deal) => {
         if (hiddenDealIds.includes(deal.id)) return false;
         if (view === "saved" && !savedDealIds.includes(deal.id)) return false;
-        if (selectedCategory !== "all" && deal.category_id !== selectedCategory) return false;
+        if (selectedCategory !== "all" && publicDealCategory(deal.category_id) !== selectedCategory) return false;
         return !query || `${deal.title} ${deal.brand || ""} ${deal.asin}`.toLowerCase().includes(query);
       })
       .sort((a, b) => {
@@ -165,7 +152,7 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
             <button onClick={() => setView("all")} className={`shrink-0 rounded-full px-3 py-2 text-sm font-semibold ${view === "all" ? "bg-amber-400 text-zinc-950" : "bg-zinc-900 text-zinc-300"}`}>All deals</button>
             <button onClick={() => setView("saved")} className={`shrink-0 rounded-full px-3 py-2 text-sm font-semibold ${view === "saved" ? "bg-amber-400 text-zinc-950" : "bg-zinc-900 text-zinc-300"}`}>Saved {savedDealIds.length > 0 && `(${savedDealIds.length})`}</button>
             <span className="h-6 w-px shrink-0 bg-zinc-800" />
-            {categories.map(([id, name]) => <button key={id} onClick={() => setSelectedCategory(selectedCategory === id ? "all" : id)} className={`shrink-0 rounded-full px-3 py-2 text-sm font-semibold ${selectedCategory === id ? "bg-white text-zinc-950" : "bg-zinc-900 text-zinc-300"}`}>{name}</button>)}
+            {publicDealCategories.map(({ id, name }) => <button key={id} onClick={() => setSelectedCategory(selectedCategory === id ? "all" : id)} className={`shrink-0 rounded-full px-3 py-2 text-sm font-semibold ${selectedCategory === id ? "bg-white text-zinc-950" : "bg-zinc-900 text-zinc-300"}`}>{name}</button>)}
           </div>
         </div>
       </div>
@@ -191,14 +178,17 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
         <div className="space-y-4">
           {visibleDeals.map((deal) => {
             const saved = savedDealIds.includes(deal.id);
-            const timing = getTiming(deal.expires_at);
+            const checkedAt = deal.scoring_components?.lifecycle?.checkedAt;
+            const priceIsStale = deal.source === FEED_HUB_SOURCE && (!checkedAt || now - Date.parse(checkedAt) >= 24 * 60 * 60 * 1000);
+            const timing = deal.source === FEED_HUB_SOURCE ? null : getTiming(deal.expires_at, now);
+            const categoryName = publicDealCategories.find(({ id }) => id === publicDealCategory(deal.category_id))?.name;
             return (
               <article key={deal.id} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-lg shadow-black/20">
                 <div className="relative">
-                  {deal.image_url && <a href={deal.amazon_url || "#"} target="_blank" rel="sponsored nofollow noreferrer" aria-label={`View ${deal.title} on Amazon`} className="block aspect-square w-full bg-white p-5 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-amber-400 sm:aspect-[4/3]"><img src={deal.image_url} alt={deal.title} className="h-full w-full object-contain" /></a>}
+                  {deal.image_url && <a href={deal.amazon_url || "#"} target="_blank" rel="sponsored nofollow noreferrer" aria-label={`View ${deal.title} on Amazon`} className="block aspect-square w-full bg-white p-5 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-amber-400 sm:aspect-[4/3]"><img loading="lazy" src={deal.image_url} alt={deal.title} className="h-full w-full object-contain" /></a>}
                   <div className="absolute left-3 top-3 flex flex-wrap gap-2">
                     {deal.scoring_components?.editorial?.featured && <span className="rounded-full bg-zinc-950 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-amber-300 shadow">Featured</span>}
-                    {isRecent(deal.created_at) && <span className="rounded-full bg-amber-400 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-zinc-950 shadow">Recently added</span>}
+                    {isRecent(deal.created_at, now) && <span className="rounded-full bg-amber-400 px-2.5 py-1 text-xs font-black uppercase tracking-wide text-zinc-950 shadow">Recently added</span>}
                   </div>
                   <button onClick={() => toggleSaved(deal.id)} aria-label={saved ? `Remove ${deal.title} from saved deals` : `Save ${deal.title}`} aria-pressed={saved} className={`absolute right-3 top-3 grid h-11 w-11 place-items-center rounded-full border shadow-lg backdrop-blur ${saved ? "border-amber-300 bg-amber-400 text-zinc-950" : "border-zinc-300 bg-zinc-950/80 text-white"}`}>
                     <svg aria-hidden="true" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" className="h-5 w-5"><path d="M6 4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21l-6-4-6 4V4.5Z"/></svg>
@@ -208,18 +198,18 @@ export function DealsFeed({ deals }: { deals: Deal[] }) {
                 <div className="p-4">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     {deal.badges?.filter((badge) => publicBadges.includes(badge)).slice(0, 2).map((badge) => <span key={badge} className="rounded-full bg-amber-500/10 px-2 py-1 text-xs font-bold text-amber-300">{badge}</span>)}
-                    <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{deal.categories?.name || deal.category_id}</span>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{categoryName || deal.category_id}</span>
                   </div>
                   <h2 className="text-lg font-bold leading-snug text-white">{deal.title}</h2>
                   <p className="mt-1 text-sm text-zinc-400">{deal.brand || "Unknown brand"}</p>
 
                   <div className="mt-4 flex items-end justify-between gap-4 border-y border-zinc-800 py-4">
-                    <div><p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Amazon price</p><p className="mt-1 text-3xl font-black tracking-tight text-white">{formatPrice(deal.current_price)}</p></div>
-                    <div className="text-right"><p className={`text-sm font-bold ${timing.urgent ? "text-amber-300" : "text-zinc-300"}`}>{timing.text}</p><p className="mt-1 text-xs text-zinc-500">Published {formatPublished(deal.created_at)}</p></div>
+                    <div><p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Amazon price</p><p className="mt-1 text-3xl font-black tracking-tight text-white">{formatPrice(priceIsStale ? null : deal.current_price)}</p></div>
+                    <div className="text-right">{timing && <p className={`text-sm font-bold ${timing.urgent ? "text-amber-300" : "text-zinc-300"}`}>{timing.text}</p>}<p className="mt-1 text-xs text-zinc-500">Published {formatPublished(deal.created_at)}</p></div>
                   </div>
 
                   <div className="mt-3 flex items-center justify-between gap-3 text-xs text-zinc-500">
-                    <span>{getAmazonFreshnessText(deal.scoring_components?.lifecycle?.checkedAt)}</span>
+                    <span>{getAmazonFreshnessText(checkedAt)}</span>
                     <span className="shrink-0 rounded-md bg-zinc-800 px-2 py-1 font-bold text-zinc-300">Score {deal.deal_score}</span>
                   </div>
                   <p className="mt-2 text-xs text-zinc-600">Price and availability may change. Final price is shown on Amazon.</p>

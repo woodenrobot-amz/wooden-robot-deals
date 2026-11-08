@@ -10,8 +10,8 @@ const adminLinks = [
   },
   {
     href: "/admin/add-deal",
-    title: "Add Deal",
-    description: "Fetch an ASIN, preview scoring, and save a deal.",
+    title: "Feed Hub",
+    description: "Paste ASINs, review deal cards, and publish to the public feed.",
   },
   {
     href: "/admin/manage-deals",

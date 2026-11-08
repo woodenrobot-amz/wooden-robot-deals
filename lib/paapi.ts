@@ -5,6 +5,7 @@ export type PaapiProduct = {
   title?: string | null;
   imageUrl?: string | null;
   currentPrice?: number | null;
+  availability?: string | null;
   detailPageUrl?: string | null;
 };
 
@@ -31,6 +32,7 @@ export async function getPaapiProductByAsin(
     title: item.title,
     imageUrl: item.imageUrl,
     currentPrice: item.currentPrice,
+    availability: item.availability,
     detailPageUrl: item.affiliateUrl,
   };
 }

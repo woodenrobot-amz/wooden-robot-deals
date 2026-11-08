@@ -26,9 +26,9 @@ export default async function AddDealPage() {
           <p className="text-sm uppercase tracking-widest text-amber-400">
             Admin
           </p>
-          <h1 className="mt-2 text-3xl font-bold">Add Deal</h1>
+          <h1 className="mt-2 text-3xl font-bold">Feed Hub</h1>
           <p className="mt-3 text-sm text-zinc-400">
-            Fetch an ASIN, preview scoring, or manually create a deal.
+            Review and publish deals to the public Wooden Robot Deals feed.
           </p>
         </div>
 
