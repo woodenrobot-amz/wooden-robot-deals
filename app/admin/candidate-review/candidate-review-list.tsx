@@ -390,7 +390,10 @@ export function CandidateReviewList({
             Page {currentPage} of {totalPages}
           </span>
           <button
-            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+            onClick={() => {
+              setPage(currentPage + 1);
+              window.scrollTo(0, 0);
+            }}
             disabled={currentPage === totalPages}
             className="rounded-xl bg-zinc-800 px-4 py-2 text-sm font-bold disabled:opacity-40"
           >
