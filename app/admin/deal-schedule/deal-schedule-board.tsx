@@ -205,6 +205,7 @@ export function DealScheduleBoard({
   const [expandedPostedKeys, setExpandedPostedKeys] = useState<Set<string>>(() => new Set());
   const [notice, setNotice] = useState("");
   const [tabName, setTabName] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [addingTab, setAddingTab] = useState(false);
   const [reminderRevision, setReminderRevision] = useState(0);
 
@@ -216,12 +217,13 @@ export function DealScheduleBoard({
   }, []);
 
   const activeGroup = groups.find((group) => group.id === activeGroupId) || groups[0];
+  const showSettings = settingsOpen || !activeGroup;
   const activeItems = items.filter((item) => item.posting_group_id === activeGroup?.id);
   const activePositions = activeGroup ? slotPositions(activeGroup, items, sequenceCounts[activeGroup.id]) : [];
-  const scheduledCount = activePositions.filter((position) => {
+  const scheduledCount = activeGroup ? activePositions.filter((position) => {
     const draft = drafts[keyFor(activeGroup.id, position)] || emptyDraft();
     return draft.postBody || draft.comments.some((comment) => comment.commentText || comment.asin);
-  }).length;
+  }).length : 0;
   const postedCount = activeItems.filter((item) => item.status === "posted").length;
   const hasUnsavedChanges = Object.entries(drafts).some(([key, draft]) => {
     const [groupId, position] = key.split(":");
@@ -338,6 +340,7 @@ export function DealScheduleBoard({
       if (!response.ok) throw new Error(data.error || "Could not add the tab.");
       setGroups((current) => [...current, data.group]);
       setActiveGroupId(data.group.id);
+      setSettingsOpen(false);
       setTabName("");
       setNotice(`${data.group.name} tab added.`);
     } catch (error) {
@@ -411,15 +414,6 @@ export function DealScheduleBoard({
     }
   }
 
-  if (!activeGroup) {
-    return (
-      <div className="mt-4 rounded-3xl border border-dashed border-zinc-700 bg-zinc-900/60 p-10 text-center">
-        <h1 className="text-2xl font-bold">Deal Schedule</h1>
-        <p className="mt-2 text-sm text-zinc-400">No active posting groups are configured yet.</p>
-      </div>
-    );
-  }
-
   return (
     <section className="mt-2">
       <header className="overflow-hidden rounded-3xl border border-zinc-800 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.13),transparent_38%),#12151c] shadow-2xl shadow-black/20">
@@ -432,203 +426,223 @@ export function DealScheduleBoard({
                 Build the day on desktop. Open copy mode on your phone when it is time to post.
               </p>
             </div>
-            <div className="inline-flex w-full rounded-xl border border-zinc-700 bg-zinc-950/70 p-1 lg:w-auto">
-              {(["edit", "copy"] as const).map((view) => (
-                <button
-                  key={view}
-                  type="button"
-                  onClick={() => setViewMode(view)}
-                  className={`min-h-11 flex-1 rounded-lg px-5 text-sm font-bold capitalize transition lg:flex-none ${
-                    mode === view ? "bg-white text-zinc-950" : "text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  {view} mode
-                </button>
-              ))}
-            </div>
+            {!showSettings && (
+              <div className="inline-flex w-full rounded-xl border border-zinc-700 bg-zinc-950/70 p-1 lg:w-auto">
+                {(["edit", "copy"] as const).map((view) => (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => setViewMode(view)}
+                    className={`min-h-11 flex-1 rounded-lg px-5 text-sm font-bold capitalize transition lg:flex-none ${
+                      mode === view ? "bg-white text-zinc-950" : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    {view} mode
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center justify-between gap-2 sm:justify-start">
-              <button type="button" onClick={() => loadDate(shiftDate(date, -1))} disabled={loading} aria-label="Previous day" className="grid size-11 place-items-center rounded-xl bg-zinc-800 text-xl font-bold text-zinc-200 hover:bg-zinc-700 disabled:opacity-50">‹</button>
-              <button type="button" onClick={() => loadDate(dateInEasternTime())} disabled={loading} className="min-h-11 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200 hover:bg-zinc-700 disabled:opacity-50">Today</button>
-              <button type="button" onClick={() => loadDate(shiftDate(date, 1))} disabled={loading} aria-label="Next day" className="grid size-11 place-items-center rounded-xl bg-zinc-800 text-xl font-bold text-zinc-200 hover:bg-zinc-700 disabled:opacity-50">›</button>
+          {!showSettings && (
+            <div className="mt-6 flex flex-col gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/55 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center justify-between gap-2 sm:justify-start">
+                <button type="button" onClick={() => loadDate(shiftDate(date, -1))} disabled={loading} aria-label="Previous day" className="grid size-11 place-items-center rounded-xl bg-zinc-800 text-xl font-bold text-zinc-200 hover:bg-zinc-700 disabled:opacity-50">‹</button>
+                <button type="button" onClick={() => loadDate(dateInEasternTime())} disabled={loading} className="min-h-11 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200 hover:bg-zinc-700 disabled:opacity-50">Today</button>
+                <button type="button" onClick={() => loadDate(shiftDate(date, 1))} disabled={loading} aria-label="Next day" className="grid size-11 place-items-center rounded-xl bg-zinc-800 text-xl font-bold text-zinc-200 hover:bg-zinc-700 disabled:opacity-50">›</button>
+              </div>
+              <label className="flex min-w-0 flex-col sm:items-end">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">{loading ? "Loading…" : displayDate(date)}</span>
+                <input type="date" value={date} onChange={(event) => loadDate(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-base font-semibold text-white sm:w-auto sm:text-sm" />
+              </label>
             </div>
-            <label className="flex min-w-0 flex-col sm:items-end">
-              <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">{loading ? "Loading…" : displayDate(date)}</span>
-              <input type="date" value={date} onChange={(event) => loadDate(event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-base font-semibold text-white sm:w-auto sm:text-sm" />
-            </label>
-          </div>
-          <PostingReminder revision={reminderRevision} />
+          )}
         </div>
 
         <div className="overflow-x-auto border-t border-zinc-800 bg-zinc-950/40 px-3 pt-3 sm:px-6">
-          <div className="flex min-w-max gap-2" role="tablist" aria-label="Deal groups">
+          <div className="flex min-w-max gap-2" role="tablist" aria-label="Posting Desk">
             {groups.map((group) => {
-              const selected = group.id === activeGroup.id;
+              const selected = !showSettings && group.id === activeGroup?.id;
               return (
-                <button key={group.id} type="button" role="tab" aria-selected={selected} onClick={() => setActiveGroupId(group.id)} className={`min-h-11 rounded-t-xl border border-b-0 px-5 text-sm font-extrabold transition ${selected ? accentClasses[group.accent] : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white"}`}>
+                <button key={group.id} type="button" id={`desk-tab-${group.id}`} role="tab" aria-controls="desk-panel" aria-selected={selected} onClick={() => { setActiveGroupId(group.id); setSettingsOpen(false); }} className={`min-h-11 rounded-t-xl border border-b-0 px-5 text-sm font-extrabold transition ${selected ? accentClasses[group.accent] : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white"}`}>
                   {group.name}
                 </button>
               );
             })}
+            <button id="desk-tab-settings" type="button" role="tab" aria-controls="desk-panel"
+              aria-selected={showSettings} onClick={() => { setSettingsOpen(true); setNotice(""); }}
+              className={`min-h-11 rounded-t-xl border border-b-0 px-5 text-sm font-extrabold transition ${showSettings ? "border-zinc-500 bg-zinc-700 text-white" : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-white"}`}>
+              Settings
+            </button>
           </div>
         </div>
-        <details className="border-t border-zinc-800 bg-zinc-950/40 px-3 py-2 text-sm text-zinc-300 sm:px-6">
-          <summary className="cursor-pointer py-2 font-semibold">Add tab</summary>
-          <form onSubmit={addTab} className="flex flex-wrap items-center gap-2 pb-2">
-            <input aria-label="Tab name" placeholder="Tab name" value={tabName} maxLength={80} required
-              onChange={(event) => setTabName(event.target.value)}
-              className="min-h-11 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-white" />
-            <button type="submit" disabled={addingTab || loading || !tabName.trim()}
-              className="min-h-11 rounded-lg bg-zinc-800 px-3 font-semibold disabled:opacity-50">
-              {addingTab ? "Adding…" : "Add"}
-            </button>
-          </form>
-        </details>
       </header>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 px-4 py-3 text-sm">
-        <div className="flex items-center gap-4">
-          <span>
-            <strong className="text-white">{scheduledCount}</strong>
-            <span className="text-zinc-500">
-              {activeGroup.schedule_type === "hourly" ? " / 13 scheduled" : " planned"}
-            </span>
-          </span>
-          <span><strong className="text-emerald-300">{postedCount}</strong><span className="text-zinc-500"> posted</span></span>
-        </div>
-        <div aria-live="polite" className={`font-semibold ${notice ? "text-amber-300" : "text-zinc-600"}`}>
-          {notice || (hasUnsavedChanges ? "Unsaved changes" : "All changes saved")}
-        </div>
-      </div>
+      <div id="desk-panel" role="tabpanel" aria-labelledby={showSettings ? "desk-tab-settings" : `desk-tab-${activeGroup?.id}`}>
+        <PostingReminder revision={reminderRevision} showSettings={showSettings} />
+        {showSettings && (
+          <section className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+            <h2 className="font-bold text-white">Add a tab</h2>
+            <p className="mt-1 text-sm text-zinc-400">Create another group for your deal schedule.</p>
+            <form onSubmit={addTab} className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <input aria-label="Tab name" placeholder="Tab name" value={tabName} maxLength={80} required
+                onChange={(event) => setTabName(event.target.value)}
+                className="min-h-11 min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base text-white" />
+              <button type="submit" disabled={addingTab || loading || !tabName.trim()}
+                className="min-h-11 rounded-lg bg-zinc-800 px-3 font-semibold disabled:opacity-50">
+                {addingTab ? "Adding…" : "Add tab"}
+              </button>
+            </form>
+            <p className="text-sm text-amber-300" role="status">{notice}</p>
+          </section>
+        )}
 
-      <div className="mt-4 space-y-3" aria-busy={loading}>
-        {activePositions.map((position) => {
-          const key = keyFor(activeGroup.id, position);
-          const item = items.find(
-            (candidate) =>
-              candidate.posting_group_id === activeGroup.id &&
-              candidate.schedule_position === position,
-          );
-          const draft = drafts[key] || emptyDraft();
-          const dirty = !itemMatchesDraft(item, draft, activeGroup, position);
-          const filled = Boolean(draft.postBody || draft.comments.some((comment) => comment.commentText || comment.asin));
-          const posted = draft.status === "posted";
-          const recurring =
-            activeGroup.schedule_type === "hourly"
-              ? recurringDailySlot(activeGroup.slug, position)
-              : null;
-          const collapsed = mode === "copy" && posted && !expandedPostedKeys.has(key);
-          const label = slotLabel(activeGroup, position);
+        {!showSettings && activeGroup && (
+          <>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 px-4 py-3 text-sm">
+              <div className="flex items-center gap-4">
+                <span>
+                  <strong className="text-white">{scheduledCount}</strong>
+                  <span className="text-zinc-500">
+                    {activeGroup.schedule_type === "hourly" ? " / 13 scheduled" : " planned"}
+                  </span>
+                </span>
+                <span><strong className="text-emerald-300">{postedCount}</strong><span className="text-zinc-500"> posted</span></span>
+              </div>
+              <div aria-live="polite" className={`font-semibold ${notice ? "text-amber-300" : "text-zinc-600"}`}>
+                {notice || (hasUnsavedChanges ? "Unsaved changes" : "All changes saved")}
+              </div>
+            </div>
 
-          if (mode === "copy") {
-            return (
-              <article key={position} className={`overflow-hidden rounded-2xl border bg-zinc-900/90 ${posted ? "border-emerald-400/40" : filled ? "border-zinc-700" : "border-zinc-800"}`}>
-                <div className={`flex items-center justify-between px-4 py-3 ${collapsed ? "" : "border-b border-zinc-800"}`}>
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg font-black tabular-nums text-white">{label}</span>
-                    {recurring && <span className="text-xs font-bold text-amber-300">{recurring.label}</span>}
-                    {posted && <span className="rounded-full bg-emerald-400/15 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-300">Posted</span>}
-                    {draft.comments.length > 1 && <span className="text-xs font-bold text-sky-300">{draft.comments.length} comments</span>}
-                  </div>
-                  {posted && (
-                    <button type="button" onClick={() => setExpandedPostedKeys((current) => { const next = new Set(current); if (collapsed) next.add(key); else next.delete(key); return next; })} className="min-h-11 rounded-lg bg-zinc-800 px-3 text-xs font-bold text-zinc-200">
-                      {collapsed ? "Show" : "Collapse"}
-                    </button>
-                  )}
-                </div>
-                {!collapsed && (filled ? (
-                  <div className="space-y-3 p-3">
-                    <div className="min-w-0 rounded-xl bg-zinc-950/70 p-3">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2"><span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Post body</span><PostCharacterCount length={draft.postBody.length} /></div>
-                        <button type="button" onClick={() => handleCopy(draft.postBody, `${key}:post`)} disabled={!draft.postBody} className="min-h-11 rounded-lg bg-amber-300 px-4 text-sm font-extrabold text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-600">{copiedKey === `${key}:post` ? "Copied ✓" : "Copy post"}</button>
-                      </div>
-                      <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{draft.postBody || "No post text"}</p>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {draft.comments.map((comment, index) => (
-                        <div key={index} className="min-w-0 rounded-xl bg-zinc-950/70 p-3">
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <div><span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Comment {index + 1}</span>{activeGroup.tracks_post_events && comment.asin && <span className="ml-2 font-mono text-[11px] text-zinc-600">{comment.asin}</span>}</div>
-                            <button type="button" onClick={() => handleCopy(comment.commentText, `${key}:comment:${index}`)} disabled={!comment.commentText} className="min-h-11 rounded-lg bg-sky-300 px-4 text-sm font-extrabold text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-600">{copiedKey === `${key}:comment:${index}` ? "Copied ✓" : `Copy ${index + 1}`}</button>
-                          </div>
-                          <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{comment.commentText || "No comment text"}</p>
+            <div className="mt-4 space-y-3" aria-busy={loading}>
+              {activePositions.map((position) => {
+                const key = keyFor(activeGroup.id, position);
+                const item = items.find(
+                  (candidate) =>
+                    candidate.posting_group_id === activeGroup.id &&
+                    candidate.schedule_position === position,
+                );
+                const draft = drafts[key] || emptyDraft();
+                const dirty = !itemMatchesDraft(item, draft, activeGroup, position);
+                const filled = Boolean(draft.postBody || draft.comments.some((comment) => comment.commentText || comment.asin));
+                const posted = draft.status === "posted";
+                const recurring =
+                  activeGroup.schedule_type === "hourly"
+                    ? recurringDailySlot(activeGroup.slug, position)
+                    : null;
+                const collapsed = mode === "copy" && posted && !expandedPostedKeys.has(key);
+                const label = slotLabel(activeGroup, position);
+
+                if (mode === "copy") {
+                  return (
+                    <article key={position} className={`overflow-hidden rounded-2xl border bg-zinc-900/90 ${posted ? "border-emerald-400/40" : filled ? "border-zinc-700" : "border-zinc-800"}`}>
+                      <div className={`flex items-center justify-between px-4 py-3 ${collapsed ? "" : "border-b border-zinc-800"}`}>
+                        <div className="flex items-center gap-3">
+                          <span className="text-lg font-black tabular-nums text-white">{label}</span>
+                          {recurring && <span className="text-xs font-bold text-amber-300">{recurring.label}</span>}
+                          {posted && <span className="rounded-full bg-emerald-400/15 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-300">Posted</span>}
+                          {draft.comments.length > 1 && <span className="text-xs font-bold text-sky-300">{draft.comments.length} comments</span>}
                         </div>
-                      ))}
-                    </div>
-                    <button type="button" onClick={() => saveSlot(activeGroup.id, position, posted ? "planned" : "posted")} disabled={busyKey === key} className={`min-h-11 w-full rounded-xl text-sm font-bold ${posted ? "bg-zinc-800 text-zinc-300" : "bg-emerald-400/15 text-emerald-300"}`}>
-                      {busyKey === key ? "Saving…" : posted ? "Mark as planned" : "Mark posted"}
-                    </button>
-                  </div>
-                ) : <p className="px-4 py-5 text-sm text-zinc-600">Open edit mode to plan this deal.</p>)}
-              </article>
-            );
-          }
-
-          return (
-            <article key={position} className={`rounded-2xl border bg-zinc-900/90 p-4 transition sm:p-5 ${dirty ? "border-amber-300/50" : posted ? "border-emerald-400/35" : "border-zinc-800"}`}>
-              <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[7rem_minmax(0,1.15fr)_minmax(0,1fr)]">
-                <div className="flex items-center justify-between gap-3 xl:block">
-                  <div>
-                    <p className="text-xl font-black tabular-nums">{label}</p>
-                    {recurring && <p className="mt-1 text-xs font-bold text-amber-300">{recurring.label}</p>}
-                    <p className={`mt-1 text-xs font-bold uppercase tracking-wider ${posted ? "text-emerald-300" : dirty ? "text-amber-300" : "text-zinc-600"}`}>{posted ? "Posted" : dirty ? "Unsaved" : filled ? "Ready" : "Open"}</p>
-                    {draft.comments.length > 1 && <p className="mt-2 text-xs font-bold text-sky-300">{draft.comments.length} comments</p>}
-                  </div>
-                </div>
-
-                <label className="block">
-                  <span className="flex items-center justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Post body</span><PostCharacterCount length={draft.postBody.length} /></span>
-                  <textarea value={draft.postBody} lang="en-US" spellCheck={true} autoCorrect="on" autoCapitalize="sentences" onChange={(event) => updateDraft(activeGroup.id, position, { postBody: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveSlot(activeGroup.id, position); }} placeholder="Write the main deal post…" rows={5} className="mt-2 w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-base leading-6 text-white outline-none placeholder:text-zinc-700 focus:border-amber-300" />
-                </label>
-
-                <div className="space-y-3">
-                  {draft.comments.map((comment, index) => (
-                    <div key={index} className="rounded-xl border border-zinc-800 bg-zinc-950/45 p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Comment {index + 1}</span>
-                        {draft.comments.length > 1 && (
-                          <button type="button" onClick={() => removeComment(activeGroup.id, position, index)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-zinc-500 hover:bg-zinc-800 hover:text-red-300">Remove</button>
+                        {posted && (
+                          <button type="button" onClick={() => setExpandedPostedKeys((current) => { const next = new Set(current); if (collapsed) next.add(key); else next.delete(key); return next; })} className="min-h-11 rounded-lg bg-zinc-800 px-3 text-xs font-bold text-zinc-200">
+                            {collapsed ? "Show" : "Collapse"}
+                          </button>
                         )}
                       </div>
-                      <textarea value={comment.commentText} lang="en-US" spellCheck={true} autoCorrect="on" autoCapitalize="sentences" onChange={(event) => updateComment(activeGroup.id, position, index, { commentText: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveSlot(activeGroup.id, position); }} placeholder="Add the link, coupon, or follow-up comment…" rows={draft.comments.length > 1 ? 3 : 5} className="mt-2 w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-base leading-6 text-white outline-none placeholder:text-zinc-700 focus:border-sky-300" />
-                      {activeGroup.tracks_post_events && (
-                        <input value={comment.asin} onChange={(event) => updateComment(activeGroup.id, position, index, { asin: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) })} placeholder="ASIN (optional)" aria-label={`${label} Comment ${index + 1} ASIN`} className="mt-2 min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 font-mono text-sm uppercase text-white outline-none focus:border-sky-300" />
+                      {!collapsed && (filled ? (
+                        <div className="space-y-3 p-3">
+                          <div className="min-w-0 rounded-xl bg-zinc-950/70 p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2"><span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Post body</span><PostCharacterCount length={draft.postBody.length} /></div>
+                              <button type="button" onClick={() => handleCopy(draft.postBody, `${key}:post`)} disabled={!draft.postBody} className="min-h-11 rounded-lg bg-amber-300 px-4 text-sm font-extrabold text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-600">{copiedKey === `${key}:post` ? "Copied ✓" : "Copy post"}</button>
+                            </div>
+                            <p className="line-clamp-3 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{draft.postBody || "No post text"}</p>
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            {draft.comments.map((comment, index) => (
+                              <div key={index} className="min-w-0 rounded-xl bg-zinc-950/70 p-3">
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                  <div><span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Comment {index + 1}</span>{activeGroup.tracks_post_events && comment.asin && <span className="ml-2 font-mono text-[11px] text-zinc-600">{comment.asin}</span>}</div>
+                                  <button type="button" onClick={() => handleCopy(comment.commentText, `${key}:comment:${index}`)} disabled={!comment.commentText} className="min-h-11 rounded-lg bg-sky-300 px-4 text-sm font-extrabold text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-600">{copiedKey === `${key}:comment:${index}` ? "Copied ✓" : `Copy ${index + 1}`}</button>
+                                </div>
+                                <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-6 text-zinc-300">{comment.commentText || "No comment text"}</p>
+                              </div>
+                            ))}
+                          </div>
+                          <button type="button" onClick={() => saveSlot(activeGroup.id, position, posted ? "planned" : "posted")} disabled={busyKey === key} className={`min-h-11 w-full rounded-xl text-sm font-bold ${posted ? "bg-zinc-800 text-zinc-300" : "bg-emerald-400/15 text-emerald-300"}`}>
+                            {busyKey === key ? "Saving…" : posted ? "Mark as planned" : "Mark posted"}
+                          </button>
+                        </div>
+                      ) : <p className="px-4 py-5 text-sm text-zinc-600">Open edit mode to plan this deal.</p>)}
+                    </article>
+                  );
+                }
+
+                return (
+                  <article key={position} className={`rounded-2xl border bg-zinc-900/90 p-4 transition sm:p-5 ${dirty ? "border-amber-300/50" : posted ? "border-emerald-400/35" : "border-zinc-800"}`}>
+                    <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[7rem_minmax(0,1.15fr)_minmax(0,1fr)]">
+                      <div className="flex items-center justify-between gap-3 xl:block">
+                        <div>
+                          <p className="text-xl font-black tabular-nums">{label}</p>
+                          {recurring && <p className="mt-1 text-xs font-bold text-amber-300">{recurring.label}</p>}
+                          <p className={`mt-1 text-xs font-bold uppercase tracking-wider ${posted ? "text-emerald-300" : dirty ? "text-amber-300" : "text-zinc-600"}`}>{posted ? "Posted" : dirty ? "Unsaved" : filled ? "Ready" : "Open"}</p>
+                          {draft.comments.length > 1 && <p className="mt-2 text-xs font-bold text-sky-300">{draft.comments.length} comments</p>}
+                        </div>
+                      </div>
+
+                      <label className="block">
+                        <span className="flex items-center justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Post body</span><PostCharacterCount length={draft.postBody.length} /></span>
+                        <textarea value={draft.postBody} lang="en-US" spellCheck={true} autoCorrect="on" autoCapitalize="sentences" onChange={(event) => updateDraft(activeGroup.id, position, { postBody: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveSlot(activeGroup.id, position); }} placeholder="Write the main deal post…" rows={5} className="mt-2 w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-base leading-6 text-white outline-none placeholder:text-zinc-700 focus:border-amber-300" />
+                      </label>
+
+                      <div className="space-y-3">
+                        {draft.comments.map((comment, index) => (
+                          <div key={index} className="rounded-xl border border-zinc-800 bg-zinc-950/45 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Comment {index + 1}</span>
+                              {draft.comments.length > 1 && (
+                                <button type="button" onClick={() => removeComment(activeGroup.id, position, index)} className="min-h-9 rounded-lg px-2 text-xs font-bold text-zinc-500 hover:bg-zinc-800 hover:text-red-300">Remove</button>
+                              )}
+                            </div>
+                            <textarea value={comment.commentText} lang="en-US" spellCheck={true} autoCorrect="on" autoCapitalize="sentences" onChange={(event) => updateComment(activeGroup.id, position, index, { commentText: event.target.value })} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") saveSlot(activeGroup.id, position); }} placeholder="Add the link, coupon, or follow-up comment…" rows={draft.comments.length > 1 ? 3 : 5} className="mt-2 w-full resize-y rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-base leading-6 text-white outline-none placeholder:text-zinc-700 focus:border-sky-300" />
+                            {activeGroup.tracks_post_events && (
+                              <input value={comment.asin} onChange={(event) => updateComment(activeGroup.id, position, index, { asin: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) })} placeholder="ASIN (optional)" aria-label={`${label} Comment ${index + 1} ASIN`} className="mt-2 min-h-11 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 font-mono text-sm uppercase text-white outline-none focus:border-sky-300" />
+                            )}
+                          </div>
+                        ))}
+                        {draft.comments.length < MAX_COMMENTS && (
+                          <button type="button" onClick={() => addComment(activeGroup.id, position)} className="min-h-11 w-full rounded-xl border border-dashed border-zinc-700 text-sm font-bold text-sky-300 hover:border-sky-300/60 hover:bg-sky-300/5">+ Add comment</button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-4 xl:pl-[8rem]">
+                      <button type="button" onClick={() => saveSlot(activeGroup.id, position)} disabled={busyKey === key || !dirty} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-extrabold text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-600">{busyKey === key ? "Saving…" : dirty ? activeGroup.schedule_type === "hourly" ? "Save slot" : "Save deal" : "Saved"}</button>
+                      <button type="button" onClick={() => handleCopy(draft.postBody, `${key}:post`)} disabled={!draft.postBody} className="min-h-11 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200 disabled:text-zinc-600">{copiedKey === `${key}:post` ? "Post copied ✓" : "Copy post"}</button>
+                      {draft.comments.map((comment, index) => (
+                        <button key={index} type="button" onClick={() => handleCopy(comment.commentText, `${key}:comment:${index}`)} disabled={!comment.commentText} className="min-h-11 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200 disabled:text-zinc-600">{copiedKey === `${key}:comment:${index}` ? `Comment ${index + 1} copied ✓` : draft.comments.length > 1 ? `Copy comment ${index + 1}` : "Copy comment"}</button>
+                      ))}
+                      {filled && (
+                        <button type="button" onClick={() => saveSlot(activeGroup.id, position, posted ? "planned" : "posted")} disabled={busyKey === key} className={`min-h-11 rounded-xl px-4 text-sm font-bold ${posted ? "bg-emerald-300 text-zinc-950" : "bg-emerald-400/10 text-emerald-300"}`}>{posted ? "Posted ✓" : "Mark posted"}</button>
                       )}
                     </div>
-                  ))}
-                  {draft.comments.length < MAX_COMMENTS && (
-                    <button type="button" onClick={() => addComment(activeGroup.id, position)} className="min-h-11 w-full rounded-xl border border-dashed border-zinc-700 text-sm font-bold text-sky-300 hover:border-sky-300/60 hover:bg-sky-300/5">+ Add comment</button>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-4 xl:pl-[8rem]">
-                <button type="button" onClick={() => saveSlot(activeGroup.id, position)} disabled={busyKey === key || !dirty} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-extrabold text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-600">{busyKey === key ? "Saving…" : dirty ? activeGroup.schedule_type === "hourly" ? "Save slot" : "Save deal" : "Saved"}</button>
-                <button type="button" onClick={() => handleCopy(draft.postBody, `${key}:post`)} disabled={!draft.postBody} className="min-h-11 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200 disabled:text-zinc-600">{copiedKey === `${key}:post` ? "Post copied ✓" : "Copy post"}</button>
-                {draft.comments.map((comment, index) => (
-                  <button key={index} type="button" onClick={() => handleCopy(comment.commentText, `${key}:comment:${index}`)} disabled={!comment.commentText} className="min-h-11 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200 disabled:text-zinc-600">{copiedKey === `${key}:comment:${index}` ? `Comment ${index + 1} copied ✓` : draft.comments.length > 1 ? `Copy comment ${index + 1}` : "Copy comment"}</button>
-                ))}
-                {filled && (
-                  <button type="button" onClick={() => saveSlot(activeGroup.id, position, posted ? "planned" : "posted")} disabled={busyKey === key} className={`min-h-11 rounded-xl px-4 text-sm font-bold ${posted ? "bg-emerald-300 text-zinc-950" : "bg-emerald-400/10 text-emerald-300"}`}>{posted ? "Posted ✓" : "Mark posted"}</button>
-                )}
-              </div>
-            </article>
-          );
-        })}
+                  </article>
+                );
+              })}
+            </div>
+            {activeGroup.schedule_type === "sequential" && mode === "edit" && (
+              <button
+                type="button"
+                onClick={() => addSequentialDeal(activeGroup.id)}
+                disabled={(sequenceCounts[activeGroup.id] || 1) >= MAX_SEQUENTIAL_DEALS}
+                className="mt-4 min-h-12 w-full rounded-2xl border border-dashed border-emerald-300/50 bg-emerald-300/5 text-sm font-extrabold text-emerald-300 hover:border-emerald-300 hover:bg-emerald-300/10 disabled:opacity-50"
+              >
+                + Add another deal
+              </button>
+            )}
+          </>
+        )}
       </div>
-      {activeGroup.schedule_type === "sequential" && mode === "edit" && (
-        <button
-          type="button"
-          onClick={() => addSequentialDeal(activeGroup.id)}
-          disabled={(sequenceCounts[activeGroup.id] || 1) >= MAX_SEQUENTIAL_DEALS}
-          className="mt-4 min-h-12 w-full rounded-2xl border border-dashed border-emerald-300/50 bg-emerald-300/5 text-sm font-extrabold text-emerald-300 hover:border-emerald-300 hover:bg-emerald-300/10 disabled:opacity-50"
-        >
-          + Add another deal
-        </button>
-      )}
     </section>
   );
 }
