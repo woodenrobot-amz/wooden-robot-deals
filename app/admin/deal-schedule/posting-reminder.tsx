@@ -17,7 +17,7 @@ async function saveSubscription(subscription: PushSubscription) {
   if (!response.ok) throw new Error("Could not register this device for reminders.");
 }
 
-export function PostingReminder({ revision }: { revision: number }) {
+export function PostingReminder({ revision, showSettings }: { revision: number; showSettings: boolean }) {
   const [now, setNow] = useState(0);
   const [postedAt, setPostedAt] = useState<string | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -115,17 +115,26 @@ export function PostingReminder({ revision }: { revision: number }) {
   else if (due) timer = `Next reminder in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   else if (localHour >= 19) timer = "Reminder window ends at 8 PM";
 
+  if (!showSettings) {
+    return (
+      <p className="mt-3 px-1 text-sm tabular-nums text-zinc-400">
+        <span className="font-semibold text-zinc-100">{timer}</span> · 7 AM–8 PM local
+      </p>
+    );
+  }
+
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-400">
-      <p className="tabular-nums"><span className="font-semibold text-zinc-100">{timer}</span> · 7 AM–8 PM local</p>
+    <section className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 text-sm text-zinc-400">
+      <h2 className="text-base font-bold text-white">Push reminders</h2>
+      <p className="mt-1">Get a reminder an hour after your last post, between 7 AM and 8 PM local time.</p>
       {supported && (
         <button type="button" disabled={busy} onClick={toggleReminders}
-          className="min-h-11 rounded-lg bg-zinc-800 px-3 text-sm font-semibold text-zinc-200 disabled:opacity-50">
+          className="mt-3 min-h-11 rounded-lg bg-zinc-800 px-3 font-semibold text-zinc-200 disabled:opacity-50">
           {enabled ? "Disable push on this device" : "Enable push on this device"}
         </button>
       )}
-      {!publicKey && <p>Push setup is pending.</p>}
-      {message && <p className="w-full text-amber-300" role="status">{message}</p>}
-    </div>
+      {!publicKey && <p className="mt-2">Push setup is pending.</p>}
+      {message && <p className="mt-2 text-amber-300" role="status">{message}</p>}
+    </section>
   );
 }
