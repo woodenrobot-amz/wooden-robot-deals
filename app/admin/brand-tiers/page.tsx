@@ -1,5 +1,7 @@
 import { brandTierOptions } from "@/lib/brand-tier-options";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { rescoreDeals } from "@/lib/pipeline/rescoreDeals";
+import { RescoreButton } from "./rescore-button";
 import { BrandTable } from "./brand-table";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -58,6 +60,27 @@ async function updateBrandTiers(formData: FormData) {
   return "";
 }
 
+async function rescoreBrandDeals() {
+  "use server";
+
+  const supabase = await createClient();
+  // Only the admin can see brand rows through this client.
+  const { data, error } = await supabase.from("brand_tiers").select("id").limit(1);
+  if (error || !data?.length) return "Rescore is only available to the admin.";
+
+  try {
+    const { queue, live, skipped, incomplete } = await rescoreDeals();
+    revalidatePath("/admin/candidate-review");
+    revalidatePath("/admin/manage-deals");
+    const summary = `Updated ${queue} in Candidate Review and ${live} live.`;
+    if (incomplete || skipped) return `${summary} Some rows could not be updated. Run Rescore again.`;
+    return summary;
+  } catch (error) {
+    console.error("Could not start rescore:", error);
+    return "Could not rescore deals. Try again.";
+  }
+}
+
 export default async function BrandTiersPage() {
   const supabase = await createClient();
 
@@ -91,6 +114,8 @@ export default async function BrandTiersPage() {
           <p className="mt-3 text-sm text-zinc-400">
             Add brands and change their scoring tiers.
           </p>
+
+          <RescoreButton rescore={rescoreBrandDeals} />
 
           <form
             action={addBrandTier}

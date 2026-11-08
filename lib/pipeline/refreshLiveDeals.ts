@@ -200,7 +200,7 @@ export async function refreshLiveDeals() {
     for (const badge of scoring.badges) badges.add(badge);
 
     const renewedExpiry = new Date(Math.max(Date.parse(deal.expires_at), renewedThrough));
-    const { error: updateError } = await supabase
+    const { data: updated, error: updateError } = await supabase
       .from("deals")
       .update({
         current_price: currentPrice,
@@ -214,8 +214,15 @@ export async function refreshLiveDeals() {
       })
       .eq("id", deal.id)
       .eq("status", "active")
-      .eq("expires_at", deal.expires_at);
+      .eq("expires_at", deal.expires_at)
+      .filter("scoring_components", deal.scoring_components == null ? "is" : "eq", JSON.stringify(deal.scoring_components))
+      .select("id").maybeSingle();
     if (updateError) throw new Error(`Failed to refresh ${asin}: ${updateError.message}`);
+
+    if (!updated) {
+      preserved += 1;
+      continue;
+    }
 
     refreshed.push({ id: deal.id, asin, current_price: currentPrice, deal_score: dealScore, scoring_components: scoringComponents });
   }
