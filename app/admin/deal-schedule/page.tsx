@@ -15,7 +15,7 @@ export default async function DealSchedulePage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) redirect("/admin/login");
+  if (!user) redirect("/login?next=/admin/deal-schedule");
 
   const params = await searchParams;
   const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(params.date || "")
