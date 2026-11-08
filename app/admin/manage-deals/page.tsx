@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { PUBLIC_DEAL_LIMIT } from "@/lib/public-feed";
 import { AdminDealList } from "../admin-deal-list";
 
 export default async function ManageDealsPage() {
@@ -16,7 +17,7 @@ export default async function ManageDealsPage() {
       .select("id, asin, title, brand, category_id, deal_score, current_price, avg_90_price, image_url, status, source, created_at, expires_at, scoring_components")
       .eq("status", "active")
       .order("created_at", { ascending: false })
-      .limit(100),
+      .limit(PUBLIC_DEAL_LIMIT),
     admin.from("categories").select("id, name").order("name"),
   ]);
 

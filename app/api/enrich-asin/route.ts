@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import { scoreDeal } from "@/lib/scoring";
 import { getIgnoredAsins } from "@/lib/ignored-asins";
 import { getBrandTierMap, normalizeBrandName } from "@/lib/brandTiers";
@@ -12,14 +13,18 @@ import {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const asin = String(body.asin || "")
+    const body = await request.json().catch(() => null);
+
+    const asin = String(body?.asin || "")
       .trim()
       .toUpperCase();
 
-    if (!asin) {
-      return NextResponse.json({ error: "ASIN is required." }, { status: 400 });
+    if (!/^[A-Z0-9]{10}$/.test(asin)) {
+      return NextResponse.json({ error: "Enter a valid 10-character ASIN." }, { status: 400 });
     }
 
     const ignoredAsins = await getIgnoredAsins();
@@ -83,6 +88,10 @@ export async function POST(request: Request) {
         }`,
       keepa_url: `https://keepa.com/#!product/1-${asin}`,
       current_price: currentPrice,
+      live_price_verified: Boolean(
+        paapiProduct?.currentPrice && paapiProduct.currentPrice > 0 &&
+        !/unavailable|out of stock|not available/i.test(paapiProduct.availability || ""),
+      ),
       avg_90_price: avg90Price,
       deal_score: scoring.totalScore,
       badges: scoring.badges,

@@ -3,14 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-const categories = [
-  { id: "woodworking", name: "Woodworking" },
-  { id: "auto", name: "Auto" },
-  { id: "garage", name: "Garage" },
-  { id: "edc", name: "EDC" },
-  { id: "tech", name: "Tech" },
-  { id: "three_d_printing", name: "3D Printing" },
-];
+import { publicDealCategories } from "@/lib/public-feed";
 
 export function ManualDealForm() {
   const supabase = createClient();
@@ -85,7 +78,7 @@ async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
         <input name="brand" placeholder="Brand" className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none" />
 
         <select name="category_id" className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none">
-          {categories.map((category) => (
+          {publicDealCategories.map((category) => (
             <option key={category.id} value={category.id}>
               {category.name}
             </option>

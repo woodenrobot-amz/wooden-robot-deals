@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { refreshLiveDeals } from "@/lib/pipeline/refreshLiveDeals";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 function isAuthorized(request: Request) {
   const expectedSecret = process.env.AUTOMATION_SECRET;

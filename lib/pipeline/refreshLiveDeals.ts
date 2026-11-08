@@ -1,11 +1,11 @@
 import "server-only";
 
 import { getAmazonItems, type AmazonPublicItem } from "@/lib/amazon-creators";
+import { FEED_DEAL_LIFETIME_MS, FEED_HUB_SOURCE, PUBLIC_DEAL_LIMIT } from "@/lib/public-feed";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const AMAZON_BATCH_SIZE = 10;
 const AMAZON_BATCH_DELAY_MS = 1_100;
-const MAX_ACTIVE_DEALS = 100;
 const MATERIAL_PRICE_INCREASE_PERCENT = 0.03;
 const MATERIAL_PRICE_INCREASE_DOLLARS = 1;
 
@@ -21,6 +21,7 @@ type Deal = {
   scoring_components: Record<string, unknown> | null;
   badges: string[] | null;
   expires_at: string;
+  source: string | null;
 };
 
 function wait(milliseconds: number) {
@@ -96,13 +97,16 @@ async function getAmazonItemsInBatches(asins: string[]) {
 export async function refreshLiveDeals() {
   const supabase = createAdminClient();
   const checkedAt = new Date().toISOString();
+  const renewedThrough = Date.parse(checkedAt) + FEED_DEAL_LIFETIME_MS;
   const { data, error } = await supabase
     .from("deals")
     .select(
-      "id, asin, title, image_url, amazon_url, current_price, avg_90_price, deal_score, scoring_components, badges, expires_at",
+      "id, asin, title, image_url, amazon_url, current_price, avg_90_price, deal_score, scoring_components, badges, expires_at, source",
     )
     .eq("status", "active")
-    .limit(MAX_ACTIVE_DEALS);
+    .order("expires_at")
+    .order("id")
+    .limit(PUBLIC_DEAL_LIMIT);
 
   if (error) throw new Error(`Failed to load live deals: ${error.message}`);
 
@@ -126,7 +130,9 @@ export async function refreshLiveDeals() {
           "expired",
         ),
       })
-      .eq("id", deal.id);
+      .eq("id", deal.id)
+      .eq("status", "active")
+      .eq("expires_at", deal.expires_at);
     if (updateError) throw new Error(`Failed to expire ${deal.asin}: ${updateError.message}`);
   }
 
@@ -149,15 +155,19 @@ export async function refreshLiveDeals() {
     }
 
     const unavailable = isExplicitlyUnavailable(item.availability);
+    const renews = deal.source === FEED_HUB_SOURCE;
     const previousPrice = Number(deal.current_price || 0);
+    const priorLifecycle = toRecord(toRecord(deal.scoring_components).lifecycle);
+    const referencePrice = Number(priorLifecycle.referencePrice) || previousPrice;
+    const priceThreshold = renews ? Math.min(referencePrice, previousPrice) : previousPrice;
     const currentPrice = Number(item.currentPrice || 0);
     const materialIncrease =
-      previousPrice > 0 &&
+      priceThreshold > 0 &&
       currentPrice >
-        previousPrice +
+        priceThreshold +
           Math.max(
             MATERIAL_PRICE_INCREASE_DOLLARS,
-            previousPrice * MATERIAL_PRICE_INCREASE_PERCENT,
+            priceThreshold * MATERIAL_PRICE_INCREASE_PERCENT,
           );
 
     if (unavailable || currentPrice <= 0 || materialIncrease) {
@@ -177,7 +187,9 @@ export async function refreshLiveDeals() {
             reason,
           ),
         })
-        .eq("id", deal.id);
+        .eq("id", deal.id)
+        .eq("status", "active")
+        .eq("expires_at", deal.expires_at);
       if (updateError) throw new Error(`Failed to remove ${asin}: ${updateError.message}`);
       removed.push({ asin, reason });
       continue;
@@ -194,7 +206,7 @@ export async function refreshLiveDeals() {
       ...oldComponents,
       discountPercent: Math.round(discountPercent * 10) / 10,
       discountScore,
-      lifecycle: { checkedAt, outcome: "refreshed", reason: null },
+      lifecycle: { checkedAt, outcome: "refreshed", reason: null, ...(renews ? { referencePrice } : {}) },
     };
     const dealScore = clampScore(
       discountScore +
@@ -208,10 +220,12 @@ export async function refreshLiveDeals() {
     if (discountPercent >= 20) badges.add("Huge Discount");
     if (discountPercent >= 35) badges.add("All Time Low");
 
+    const renewedExpiry = new Date(Math.max(Date.parse(deal.expires_at), renewedThrough));
     const { error: updateError } = await supabase
       .from("deals")
       .update({
         current_price: currentPrice,
+        ...(renews ? { expires_at: renewedExpiry.toISOString() } : {}),
         title: item.title || deal.title,
         image_url: item.imageUrl || deal.image_url,
         amazon_url: item.affiliateUrl || deal.amazon_url,
@@ -219,7 +233,9 @@ export async function refreshLiveDeals() {
         scoring_components: scoringComponents,
         badges: Array.from(badges),
       })
-      .eq("id", deal.id);
+      .eq("id", deal.id)
+      .eq("status", "active")
+      .eq("expires_at", deal.expires_at);
     if (updateError) throw new Error(`Failed to refresh ${asin}: ${updateError.message}`);
 
     refreshed.push({ id: deal.id, asin, current_price: currentPrice, deal_score: dealScore, scoring_components: scoringComponents });

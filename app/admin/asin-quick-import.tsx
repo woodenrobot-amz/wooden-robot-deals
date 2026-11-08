@@ -2,288 +2,196 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { FEED_DEAL_LIFETIME_MS, FEED_HUB_SOURCE, publicDealCategories } from "@/lib/public-feed";
 
-const categories = [
-  { id: "woodworking", name: "Woodworking" },
-  { id: "auto", name: "Auto" },
-  { id: "garage", name: "Garage" },
-  { id: "edc", name: "EDC" },
-  { id: "tech", name: "Tech" },
-  { id: "three_d_printing", name: "3D Printing" },
-];
-
-type EnrichedDeal = {
+type DealPreview = {
   asin: string;
   title: string;
   brand: string;
-  category_id: string;
-  image_url: string;
+  image_url: string | null;
   amazon_url: string;
   current_price: number;
-  avg_90_price: number;
+  live_price_verified: boolean;
+  avg_90_price: number | null;
   deal_score: number;
   badges: string[];
-  scoring_components: {
-    discountScore: number;
-    brandScore: number;
-    demandScore: number;
-    confidenceScore: number;
-    brandBonus?: number;
-    baseScore: number;
-    discountPercent: number;
-  };
-  brand_tier: number;
+  scoring_components: Record<string, unknown>;
 };
 
+type PreviewCard = {
+  asin: string;
+  deal?: DealPreview;
+  checkedAt?: string;
+  selected: boolean;
+  message?: string;
+  published?: boolean;
+};
+
+const MAX_BATCH_SIZE = 10;
+
 export function AsinQuickImport() {
-  const supabase = createClient();
-
-  const [asin, setAsin] = useState("");
+  const [input, setInput] = useState("");
+  const [category, setCategory] = useState("top_deals");
+  const [cards, setCards] = useState<PreviewCard[]>([]);
   const [message, setMessage] = useState("");
-  const [result, setResult] = useState<EnrichedDeal | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [categoryId, setCategoryId] = useState("woodworking");
+  const [busy, setBusy] = useState<"preview" | "publish" | null>(null);
+  const selected = cards.filter((card) => card.selected);
 
-  async function handleFetch() {
-    if (!asin.trim()) {
-      setMessage("Enter an ASIN first.");
+  async function previewDeals() {
+    const asins = [...new Set(input.trim().toUpperCase().split(/[\s,;]+/))];
+    const invalid = asins.find((asin) => !/^[A-Z0-9]{10}$/.test(asin));
+    if (invalid !== undefined || asins.length > MAX_BATCH_SIZE) {
+      setMessage("Paste up to 10 valid ASINs, separated by spaces, commas, or newlines.");
       return;
     }
 
-    setLoading(true);
+    setBusy("preview");
     setMessage("");
-    setResult(null);
-
-    try {
-      const response = await fetch("/api/enrich-asin", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ asin }),
-      });
-
-      const text = await response.text();
-
-      let data: EnrichedDeal | { error?: string };
+    setCards([]);
+    for (const [index, asin] of asins.entries()) {
+      if (index > 0) await new Promise((resolve) => setTimeout(resolve, 1100));
+      let card: PreviewCard;
       try {
-        data = JSON.parse(text) as EnrichedDeal | { error?: string };
+        const response = await fetch("/api/enrich-asin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ asin }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          card = { asin, selected: false, message: data.error || "Could not preview this ASIN." };
+        } else {
+          const deal = data as DealPreview;
+          card = {
+            asin, deal, selected: deal.live_price_verified,
+            checkedAt: new Date().toISOString(),
+            message: deal.live_price_verified ? undefined : "Amazon did not confirm a live price. Preview again before publishing.",
+          };
+        }
       } catch {
-        setMessage(
-          text
-            ? `API returned non-JSON response: ${text.slice(0, 300)}`
-            : `API returned ${response.status} with no response body.`,
-        );
-        return;
+        card = { asin, selected: false, message: "Could not preview this ASIN. Try again." };
       }
-
-      if (!response.ok) {
-        setMessage(
-          ("error" in data && data.error) || `API returned ${response.status}`,
-        );
-        return;
-      }
-
-      setResult(data as EnrichedDeal);
-      setMessage("Fetched deal preview.");
-    } catch (error) {
-      console.error(error);
-      setMessage("Unexpected error while fetching ASIN data.");
-    } finally {
-      setLoading(false);
+      setCards((current) => [...current, card]);
     }
+    setBusy(null);
   }
 
-  async function handleSaveDeal() {
-    if (!result) return;
-
-    setSaving(true);
+  async function publishDeals() {
+    setBusy("publish");
     setMessage("");
+    const supabase = createClient();
+    let published = 0;
 
-    const { error } = await supabase.from("deals").insert({
-      asin: result.asin,
-      title: result.title,
-      brand: result.brand,
-      category_id: categoryId,
-      image_url: result.image_url,
-      amazon_url: result.amazon_url,
-      current_price: result.current_price,
-      avg_90_price: result.avg_90_price,
-      deal_score: result.deal_score,
-      scoring_components: result.scoring_components,
-      badges: result.badges,
-      status: "active",
-      source: "quick_import",
-      expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
-    });
-
-    if (error) {
-      if (error.code === "23505") {
-        setMessage("Deal already exists in the active feed.");
-      } else {
-        setMessage(error.message);
+    for (const card of selected) {
+      const deal = card.deal!;
+      let message: string;
+      let success = false;
+      try {
+        const checkedAt = card.checkedAt!;
+        if (Date.now() - Date.parse(checkedAt) >= 60 * 60 * 1000) {
+          throw new Error("This preview is more than an hour old. Preview it again.");
+        }
+        const { error } = await supabase.from("deals").insert({
+          asin: deal.asin,
+          title: deal.title,
+          brand: deal.brand,
+          category_id: category,
+          image_url: deal.image_url,
+          amazon_url: deal.amazon_url,
+          current_price: deal.current_price,
+          avg_90_price: deal.avg_90_price,
+          deal_score: deal.deal_score,
+          badges: deal.badges,
+          scoring_components: {
+            ...deal.scoring_components,
+            lifecycle: { checkedAt, outcome: "published", referencePrice: deal.current_price },
+          },
+          status: "active",
+          source: FEED_HUB_SOURCE,
+          expires_at: new Date(Date.now() + FEED_DEAL_LIFETIME_MS).toISOString(),
+        });
+        if (error && error.code !== "23505") throw new Error(error.message);
+        success = !error;
+        message = success ? "Published" : "Already in the live catalog.";
+      } catch (error) {
+        message = error instanceof Error ? error.message : "Publishing failed. Try again.";
       }
-
-      setSaving(false);
-      return;
+      if (success) published += 1;
+      setCards((current) => current.map((entry) =>
+        entry.asin === card.asin ? { ...entry, selected: false, published: success, message } : entry,
+      ));
     }
 
-    setMessage("Deal saved.");
-    setResult(null);
-    setAsin("");
-    setSaving(false);
+    setMessage(`Published ${published} of ${selected.length} selected deals.`);
+    setBusy(null);
   }
 
   return (
-    <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
-      <h2 className="text-xl font-bold">ASIN Quick Import</h2>
-
+    <section className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+      <h2 className="text-xl font-bold">Import deals by ASIN</h2>
       <p className="mt-2 text-sm text-zinc-400">
-        Fetch an ASIN, preview the enriched data, then save it as an active
-        deal.
+        Paste up to 10 ASINs from Amazon New Arrivals or your own picks, then review the cards before publishing.
       </p>
-
-      <div className="mt-4 flex gap-3">
-        <input
-          value={asin}
-          onChange={(event) => setAsin(event.target.value)}
-          placeholder="Enter ASIN"
-          className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none"
-        />
-
-        <button
-          onClick={handleFetch}
-          disabled={loading}
-          className="rounded-xl bg-amber-400 px-4 py-3 font-bold text-zinc-950 disabled:opacity-50"
-        >
-          {loading ? "Fetching..." : "Fetch"}
+      <label className="mt-4 block text-sm font-semibold" htmlFor="feed-asins">ASINs</label>
+      <textarea
+        id="feed-asins"
+        rows={4}
+        value={input}
+        onChange={(event) => setInput(event.target.value)}
+        disabled={busy !== null}
+        className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-950 p-3"
+      />
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="grid gap-2 text-sm font-semibold">
+          Public category
+          <select value={category} onChange={(event) => setCategory(event.target.value)} disabled={busy !== null}
+            className="rounded-xl border border-zinc-700 bg-zinc-950 p-3">
+            {publicDealCategories.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+          </select>
+        </label>
+        <button onClick={previewDeals} disabled={busy !== null || !input.trim()}
+          className="rounded-xl border border-zinc-600 px-4 py-3 font-semibold disabled:opacity-50">
+          {busy === "preview" ? "Loading previews…" : "Preview deals"}
+        </button>
+        <button onClick={publishDeals} disabled={busy !== null || !selected.length}
+          className="rounded-xl bg-amber-400 px-4 py-3 font-bold text-zinc-950 disabled:opacity-50">
+          {busy === "publish" ? "Publishing…" : `Publish selected (${selected.length})`}
         </button>
       </div>
-
-      <select
-        value={categoryId}
-        onChange={(event) => setCategoryId(event.target.value)}
-        className="mt-3 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none"
-      >
-        {categories.map((category) => (
-          <option key={category.id} value={category.id}>
-            {category.name}
-          </option>
+      <p className="mt-3 text-sm text-zinc-300" role="status">{message}</p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        {cards.map((card) => (
+          <article key={card.asin} className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+            {card.deal?.image_url && (
+              /* eslint-disable-next-line @next/next/no-img-element -- Amazon supplies remote product images. */
+              <img src={card.deal.image_url} alt="" loading="lazy"
+                className="mb-3 h-36 w-full rounded-xl bg-white object-contain p-2" />
+            )}
+            <h3 className="font-bold">{card.deal?.title || card.asin}</h3>
+            {card.deal && (
+              <>
+                <p className="mt-1 text-sm text-zinc-400">{card.deal.brand} · {card.asin}</p>
+                <p className="mt-2 text-sm">
+                  {card.deal.live_price_verified ? `$${card.deal.current_price.toFixed(2)} · ` : ""}
+                  Score {card.deal.deal_score}
+                </p>
+                <label className="mt-3 flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={card.selected}
+                    disabled={busy !== null || card.published || !card.deal.live_price_verified}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setCards((current) => current.map((entry) =>
+                        entry.asin === card.asin ? { ...entry, selected: checked } : entry,
+                      ));
+                    }} />
+                  Include in publish
+                </label>
+              </>
+            )}
+            {card.message && <p className="mt-2 text-sm text-zinc-300">{card.message}</p>}
+          </article>
         ))}
-      </select>
-
-      {message && <p className="mt-4 text-sm text-zinc-300">{message}</p>}
-
-      {result && (
-        <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-          {result.image_url && (
-            <div className="mb-4 rounded-xl bg-white p-3">
-              <img
-                src={result.image_url}
-                alt={result.title}
-                className="mx-auto h-40 w-full object-contain"
-              />
-            </div>
-          )}
-
-          <div className="mb-2 flex flex-wrap gap-2">
-            {result.badges.map((badge) => (
-              <span
-                key={badge}
-                className="rounded-full bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-300"
-              >
-                {badge}
-              </span>
-            ))}
-          </div>
-
-          <h3 className="text-lg font-bold">{result.title}</h3>
-
-          <p className="mt-1 text-sm text-zinc-400">
-            {result.brand} · {result.asin}
-          </p>
-
-          <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-            <div className="rounded-xl bg-zinc-900 p-3">
-              <div className="text-zinc-500">Current</div>
-              <div className="font-bold">${result.current_price}</div>
-            </div>
-
-            <div className="rounded-xl bg-zinc-900 p-3">
-              <div className="text-zinc-500">90d Avg</div>
-              <div className="font-bold">${result.avg_90_price}</div>
-            </div>
-
-            <div className="rounded-xl bg-zinc-900 p-3">
-              <div className="text-zinc-500">Score</div>
-              <div className="font-bold">{result.deal_score}</div>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm">
-            <div className="mb-3 font-bold text-zinc-200">Score Breakdown</div>
-
-            <div className="space-y-2 text-zinc-400">
-              <div className="flex justify-between">
-                <span>Discount Percent</span>
-                <span className="font-semibold text-zinc-100">
-                  {result.scoring_components.discountPercent}%
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Discount Score</span>
-                <span className="font-semibold text-zinc-100">
-                  +{result.scoring_components.discountScore}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span>Brand Score</span>
-                <span className="font-semibold text-zinc-100">
-                  +
-                  {result.scoring_components.brandScore ??
-                    result.scoring_components.brandBonus ??
-                    0}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span>Demand Score</span>
-                <span className="font-semibold text-zinc-100">
-                  +{result.scoring_components.demandScore}
-                </span>
-              </div>
-
-              <div className="flex justify-between">
-                <span>Confidence Score</span>
-                <span className="font-semibold text-zinc-100">
-                  +{result.scoring_components.confidenceScore}
-                </span>
-              </div>
-
-              <div className="border-t border-zinc-800 pt-2">
-                <div className="flex justify-between text-zinc-200">
-                  <span>Total</span>
-                  <span className="font-bold">{result.deal_score}</span>
-                </div>
-              </div>
-
-              <div className="pt-2 text-xs text-zinc-500">
-                Brand Tier: {result.brand_tier}
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={handleSaveDeal}
-            disabled={saving}
-            className="mt-4 w-full rounded-xl bg-amber-400 px-4 py-3 font-bold text-zinc-950 disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save Deal"}
-          </button>
-        </div>
-      )}
-    </div>
+      </div>
+    </section>
   );
 }

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { refreshLiveDeals } from "@/lib/pipeline/refreshLiveDeals";
 
+export const maxDuration = 120;
+
 export async function POST() {
   try {
     const supabase = await createClient();
