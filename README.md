@@ -103,10 +103,12 @@ Cron job every minute. Existing Lowe's plans stay in the database.
 
 Generate a stable VAPID key pair with `npx web-push generate-vapid-keys` and set
 `POSTING_PUSH_PUBLIC_KEY`, `POSTING_PUSH_PRIVATE_KEY`, and
-`POSTING_PUSH_SUBJECT` (a `mailto:` contact) in the Posting Desk deployment.
+`POSTING_PUSH_SUBJECT` (an HTTPS site or a `mailto:` contact) in the Posting Desk deployment.
 Keep the private key server-side. In Supabase Vault, add
 `posting_reminder_app_url` (the deployed HTTPS origin) and
-`posting_reminder_automation_secret` (the deployment's `AUTOMATION_SECRET`).
+`posting_reminder_automation_secret` (the same value as `POSTING_REMINDER_AUTOMATION_SECRET` in the deployment).
+Set a dedicated random `POSTING_REMINDER_AUTOMATION_SECRET` in production. Existing
+installations can also use their `AUTOMATION_SECRET` when the dedicated setting is absent.
 The job makes no requests until both Vault values and a device subscription exist.
 
 Open the Posting Desk on each device that should receive alerts and choose
