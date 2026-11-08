@@ -10,13 +10,13 @@ export const revalidate = 0;
 export default async function Home() {
   if (isAdminSurface) redirect("/admin/deal-schedule");
 
-  const now = Date.now();
+  const now = new Date().toISOString();
   const supabase = createAdminClient();
   const { data: deals, error } = await supabase
     .from("deals")
     .select("id, asin, title, brand, category_id, current_price, deal_score, badges, amazon_url, image_url, created_at, expires_at, source, scoring_components")
     .eq("status", "active")
-    .gt("expires_at", new Date(now).toISOString())
+    .gt("expires_at", now)
     .order("created_at", { ascending: false })
     .order("deal_score", { ascending: false })
     .limit(PUBLIC_DEAL_LIMIT);
@@ -44,7 +44,7 @@ export default async function Home() {
           </div>
         )}
 
-        <DealsFeed deals={deals || []} now={now} />
+        <DealsFeed deals={deals || []} now={Date.parse(now)} />
       </div>
       <footer className="mx-auto max-w-3xl px-4 pb-6 text-xs text-zinc-500">
         <p>
