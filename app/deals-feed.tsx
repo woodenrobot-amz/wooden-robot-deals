@@ -1,6 +1,6 @@
 "use client";
 
-import { FEED_HUB_SOURCE, publicDealCategories, publicDealCategory } from "@/lib/public-feed";
+import { publicDealCategories, publicDealCategory } from "@/lib/public-feed";
 import { useEffect, useMemo, useState } from "react";
 
 type Deal = {
@@ -15,8 +15,6 @@ type Deal = {
   amazon_url: string | null;
   image_url: string | null;
   created_at: string;
-  expires_at: string;
-  source: string | null;
   scoring_components?: {
     discountPercent?: number;
     lifecycle?: { checkedAt?: string };
@@ -52,16 +50,7 @@ function formatPrice(price: number | null) {
   }).format(price);
 }
 
-function formatPublished(createdAt: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: new Date(createdAt).getFullYear() === new Date().getFullYear() ? undefined : "numeric",
-  }).format(new Date(createdAt));
-}
-
-function getAmazonFreshnessText(checkedAt?: string) {
-  if (!checkedAt) return "Amazon price refresh pending";
+function getAmazonFreshnessText(checkedAt: string) {
   return `Amazon price as of ${new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
@@ -69,16 +58,6 @@ function getAmazonFreshnessText(checkedAt?: string) {
     minute: "2-digit",
     timeZoneName: "short",
   }).format(new Date(checkedAt))}`;
-}
-
-function getTiming(expiresAt: string, now: number) {
-  const diffMs = new Date(expiresAt).getTime() - now;
-  if (diffMs <= 0) return { text: "Expired", urgent: true };
-  const hours = Math.ceil(diffMs / 3_600_000);
-  if (hours <= 6) return { text: `Ends in ${hours}h`, urgent: true };
-  if (hours < 24) return { text: `Ends today · ${hours}h left`, urgent: true };
-  const days = Math.ceil(hours / 24);
-  return { text: `Ends in ${days} day${days === 1 ? "" : "s"}`, urgent: false };
 }
 
 function isRecent(createdAt: string, now: number) {
@@ -179,8 +158,9 @@ export function DealsFeed({ deals, now }: { deals: Deal[]; now: number }) {
           {visibleDeals.map((deal) => {
             const saved = savedDealIds.includes(deal.id);
             const checkedAt = deal.scoring_components?.lifecycle?.checkedAt;
-            const priceIsStale = deal.source === FEED_HUB_SOURCE && (!checkedAt || now - Date.parse(checkedAt) >= 24 * 60 * 60 * 1000);
-            const timing = deal.source === FEED_HUB_SOURCE ? null : getTiming(deal.expires_at, now);
+            const checkedTime = checkedAt ? Date.parse(checkedAt) : NaN;
+            const hasFreshPrice = Number.isFinite(checkedTime) && checkedTime <= now &&
+              now - checkedTime < 24 * 60 * 60 * 1000 && Number(deal.current_price) > 0;
             const categoryName = publicDealCategories.find(({ id }) => id === publicDealCategory(deal.category_id))?.name;
             return (
               <article key={deal.id} className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 shadow-lg shadow-black/20">
@@ -200,18 +180,21 @@ export function DealsFeed({ deals, now }: { deals: Deal[]; now: number }) {
                     {deal.badges?.filter((badge) => publicBadges.includes(badge)).slice(0, 2).map((badge) => <span key={badge} className="rounded-full bg-amber-500/10 px-2 py-1 text-xs font-bold text-amber-300">{badge}</span>)}
                     <span className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{categoryName || deal.category_id}</span>
                   </div>
-                  <h2 className="text-lg font-bold leading-snug text-white">{deal.title}</h2>
+                  <h2 className="line-clamp-2 text-lg font-bold leading-snug text-white" title={deal.title}>{deal.title}</h2>
                   <p className="mt-1 text-sm text-zinc-400">{deal.brand || "Unknown brand"}</p>
 
-                  <div className="mt-4 flex items-end justify-between gap-4 border-y border-zinc-800 py-4">
-                    <div><p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Amazon price</p><p className="mt-1 text-3xl font-black tracking-tight text-white">{formatPrice(priceIsStale ? null : deal.current_price)}</p></div>
-                    <div className="text-right">{timing && <p className={`text-sm font-bold ${timing.urgent ? "text-amber-300" : "text-zinc-300"}`}>{timing.text}</p>}<p className="mt-1 text-xs text-zinc-500">Published {formatPublished(deal.created_at)}</p></div>
+                  <div className="mt-4 flex items-start justify-between gap-4 border-y border-zinc-800 py-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Amazon price</p>
+                      <p className="mt-1 text-3xl font-black tracking-tight text-white">{formatPrice(hasFreshPrice ? deal.current_price : null)}</p>
+                      {hasFreshPrice && checkedAt && <p className="mt-2 text-xs text-zinc-400">{getAmazonFreshnessText(checkedAt)}</p>}
+                    </div>
+                    <div className="shrink-0 rounded-xl border border-amber-400/50 bg-amber-400/15 px-3 py-2 text-center text-amber-300">
+                      <p className="text-xs font-bold uppercase tracking-wide">Deal score</p>
+                      <p className="text-2xl font-black leading-tight">{deal.deal_score}</p>
+                    </div>
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between gap-3 text-xs text-zinc-500">
-                    <span>{getAmazonFreshnessText(checkedAt)}</span>
-                    <span className="shrink-0 rounded-md bg-zinc-800 px-2 py-1 font-bold text-zinc-300">Score {deal.deal_score}</span>
-                  </div>
                   <p className="mt-2 text-xs text-zinc-600">Price and availability may change. Final price is shown on Amazon.</p>
 
                   <div className="mt-4 grid grid-cols-[1fr_auto_auto] gap-2">

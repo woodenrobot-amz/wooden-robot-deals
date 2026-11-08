@@ -1,3 +1,5 @@
+import { getPaapiProductByAsin } from "@/lib/paapi";
+import { scoreDeal } from "@/lib/scoring";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -59,24 +61,51 @@ export async function POST(request: Request) {
   const enrichment = toRecord(rawData.enrichment);
 
   if (action === "publish") {
+    let item;
+    try {
+      item = await getPaapiProductByAsin(asin);
+    } catch (error) {
+      console.error("Could not verify candidate price on Amazon", error);
+      return NextResponse.json({ error: "Amazon price check failed. Try publishing again." }, { status: 502 });
+    }
+
+    const currentPrice = item?.currentPrice;
+    if (!currentPrice || currentPrice <= 0 || /unavailable|out of stock|not available/i.test(item?.availability || "")) {
+      return NextResponse.json({ error: "Amazon did not confirm an available price for this deal." }, { status: 409 });
+    }
+
+    const checkedAt = new Date().toISOString();
+    const title = String(item?.title || enrichment.title || `Amazon product ${asin}`);
+    const brand = String(enrichment.brand || "Unknown Brand");
+    const imageUrl = item?.imageUrl || enrichment.image_url || null;
+    const avg90Price = Number(enrichment.avg_90_price) || null;
+    const scoring = scoreDeal({
+      brand,
+      currentPrice,
+      avg90Price,
+      rating: Number(enrichment.rating) || null,
+      reviewCount: Number(enrichment.review_count) || null,
+      salesRank: Number(enrichment.sales_rank) || null,
+      brandTier: String(enrichment.brand_tier || ""),
+      brandBonus: Number(enrichment.brand_bonus) || 0,
+      hasImage: Boolean(imageUrl),
+      hasTitle: Boolean(title),
+    });
+
     const deal = {
       asin,
-      title: String(enrichment.title || `Amazon product ${asin}`),
-      brand: String(enrichment.brand || "Unknown Brand"),
+      title,
+      brand,
       category_id: candidate.category_id || enrichment.category_id || null,
-      image_url: enrichment.image_url || null,
-      amazon_url: enrichment.amazon_url || `https://www.amazon.com/dp/${asin}`,
-      current_price: enrichment.current_price || null,
-      avg_90_price: enrichment.avg_90_price || null,
-      deal_score: Number(enrichment.deal_score || 0),
-      badges: Array.isArray(enrichment.badges) ? enrichment.badges : [],
+      image_url: imageUrl,
+      amazon_url: item?.detailPageUrl || enrichment.amazon_url || `https://www.amazon.com/dp/${asin}`,
+      current_price: currentPrice,
+      avg_90_price: avg90Price,
+      deal_score: scoring.totalScore,
+      badges: scoring.badges,
       scoring_components: {
-        ...toRecord(enrichment.scoring_components),
-        lifecycle: {
-          checkedAt: String(enrichment.enriched_at || new Date().toISOString()),
-          outcome: "published",
-          reason: null,
-        },
+        ...scoring.components,
+        lifecycle: { checkedAt, outcome: "published", reason: null },
       },
       status: "active",
       source: `candidate:${streamId}`,
