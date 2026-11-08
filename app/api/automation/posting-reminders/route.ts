@@ -12,7 +12,7 @@ type ClaimedReminder = {
 };
 
 export async function POST(request: Request) {
-  const secret = process.env.AUTOMATION_SECRET;
+  const secret = process.env.POSTING_REMINDER_AUTOMATION_SECRET ?? process.env.AUTOMATION_SECRET;
   const expected = Buffer.from(`Bearer ${secret}`);
   const provided = Buffer.from(request.headers.get("authorization") ?? "");
   if (!secret || expected.length !== provided.length || !timingSafeEqual(expected, provided)) {
