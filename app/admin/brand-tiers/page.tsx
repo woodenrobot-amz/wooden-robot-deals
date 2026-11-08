@@ -30,26 +30,25 @@ async function addBrandTier(formData: FormData) {
   revalidatePath("/admin/brand-tiers");
 }
 
-async function updateBrandTier(_state: string, formData: FormData) {
+async function updateBrandTiers(formData: FormData) {
   "use server";
 
-  const id = String(formData.get("id") || "");
+  const ids = [...new Set(formData.getAll("id").filter((id): id is string => typeof id === "string" && id.length > 0))];
   const tier = brandTierOptions.find((option) => option.value === formData.get("tier"));
-  if (!id || !tier) return "Choose a valid tier.";
+  if (!ids.length || !tier) return "Select at least one brand and choose a tier.";
 
-  // The existing admin-only SELECT policy authorizes access to this brand.
+  // The existing admin-only SELECT policy authorizes access to each selected brand.
   const supabase = await createClient();
-  const { data: brand, error: readError } = await supabase
-    .from("brand_tiers").select("id").eq("id", id).maybeSingle();
-  if (readError || !brand) return "This brand is unavailable to edit.";
+  const { data: brands, error: readError } = await supabase
+    .from("brand_tiers").select("id").in("id", ids);
+  if (readError || brands?.length !== ids.length) return "One or more selected brands are unavailable to edit.";
 
   const { data: updated, error } = await createAdminClient()
     .from("brand_tiers")
     .update({ tier: tier.value, score_bonus: tier.bonus })
-    .eq("id", brand.id)
-    .select("id")
-    .maybeSingle();
-  if (error || !updated) {
+    .in("id", brands.map((brand) => brand.id))
+    .select("id");
+  if (error || updated?.length !== ids.length) {
     console.error("Failed to update brand tier:", error);
     return "Could not save the tier. Try again.";
   }
@@ -129,7 +128,7 @@ export default async function BrandTiersPage() {
           )}
 
           <div className="mt-6">
-            <BrandTable brands={brands || []} updateBrandTier={updateBrandTier} />
+            <BrandTable brands={brands || []} updateBrandTiers={updateBrandTiers} />
           </div>
         </div>
       </div>
