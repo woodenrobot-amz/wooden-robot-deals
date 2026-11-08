@@ -30,7 +30,8 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/admin");
+    const next = new URLSearchParams(window.location.search).get("next");
+    router.replace(next === "/admin/deal-schedule" ? next : "/admin");
     router.refresh();
   }
 
