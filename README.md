@@ -94,3 +94,23 @@ Do not assign both projects the same production domain: each origin publishes a
 different root-scoped `/manifest.webmanifest` and service-worker registration.
 
 /data/ignored-asins.json has been deprecated. Moved to Supabase.
+
+### Posting Desk push reminders
+
+Apply the Posting Desk groups and reminders migration before deploying the app. It
+adds the Makers tab, renames the existing Dad Deals tab, and schedules a Supabase
+Cron job every minute. Existing Lowe's plans stay in the database.
+
+Generate a stable VAPID key pair with `npx web-push generate-vapid-keys` and set
+`POSTING_PUSH_PUBLIC_KEY`, `POSTING_PUSH_PRIVATE_KEY`, and
+`POSTING_PUSH_SUBJECT` (a `mailto:` contact) in the Posting Desk deployment.
+Keep the private key server-side. In Supabase Vault, add
+`posting_reminder_app_url` (the deployed HTTPS origin) and
+`posting_reminder_automation_secret` (the deployment's `AUTOMATION_SECRET`).
+The job makes no requests until both Vault values and a device subscription exist.
+
+Open the Posting Desk on each device that should receive alerts and choose
+**Enable push on this device**. The latest marked post across all tabs starts a
+single one-hour countdown. Posts before 7 AM and reminders due at or after 8 PM
+do not carry over. The sending job checks once a minute, and each device uses
+the local time zone it reported when its subscription last synced.

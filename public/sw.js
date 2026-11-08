@@ -70,3 +70,26 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+self.addEventListener("push", (event) => {
+  const data = event.data?.json();
+  if (!data?.expiresAt || Date.now() >= Date.parse(data.expiresAt)) return;
+
+  event.waitUntil(self.registration.showNotification("Posting Desk", {
+    body: "It’s been an hour since your last deal post.",
+    icon: "/icons/admin-icon-192.png",
+    tag: "posting-desk-reminder",
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  if (event.notification.tag !== "posting-desk-reminder") return;
+  event.notification.close();
+  event.waitUntil((async () => {
+    const url = new URL("/admin/deal-schedule", self.location.origin).href;
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const desk = windows.find((client) => client.url === url);
+    if (desk) await desk.focus();
+    else await self.clients.openWindow(url);
+  })());
+});
