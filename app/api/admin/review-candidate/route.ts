@@ -80,16 +80,10 @@ export async function POST(request: Request) {
     const imageUrl = item?.imageUrl || enrichment.image_url || null;
     const avg90Price = Number(enrichment.avg_90_price) || null;
     const scoring = scoreDeal({
-      brand,
       currentPrice,
       avg90Price,
-      rating: Number(enrichment.rating) || null,
-      reviewCount: Number(enrichment.review_count) || null,
-      salesRank: Number(enrichment.sales_rank) || null,
       brandTier: String(enrichment.brand_tier || ""),
-      brandBonus: Number(enrichment.brand_bonus) || 0,
-      hasImage: Boolean(imageUrl),
-      hasTitle: Boolean(title),
+      brandBonus: Number(enrichment.brand_bonus ?? toRecord(enrichment.scoring_components).brandScore),
     });
 
     const deal = {
@@ -101,7 +95,7 @@ export async function POST(request: Request) {
       amazon_url: item?.detailPageUrl || enrichment.amazon_url || `https://www.amazon.com/dp/${asin}`,
       current_price: currentPrice,
       avg_90_price: avg90Price,
-      deal_score: scoring.totalScore,
+      deal_score: scoring.totalScore ?? 0,
       badges: scoring.badges,
       scoring_components: {
         ...scoring.components,

@@ -63,16 +63,10 @@ export async function POST(request: Request) {
     const brandBonus = matchedBrand?.score_bonus || 0;
 
     const scoring = scoreDeal({
-      brand,
       brandTier,
       brandBonus,
       currentPrice,
       avg90Price,
-      rating: keepaDemand.rating,
-      reviewCount: keepaDemand.reviewCount,
-      salesRank: product.salesRanks?.[0] || null,
-      hasImage: Boolean(image_url),
-      hasTitle: Boolean(title),
     });
 
     return NextResponse.json({
