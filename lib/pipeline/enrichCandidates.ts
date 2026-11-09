@@ -72,16 +72,17 @@ async function getAmazonItemsInBatches(asins: string[]) {
   return { items, errors };
 }
 
-export async function enrichCandidateQueue(requestedLimit?: number) {
+export async function enrichCandidateQueue(requestedLimit?: number, streamId?: string) {
   const supabase = createAdminClient();
   const limit = clampBatchSize(requestedLimit);
 
-  const { data, error } = await supabase
+  const query = supabase
     .from("deal_candidates")
     .select("asin, stream_id, category_id, status, raw_data")
     .in("status", ["new", "candidate"])
     .order("asin", { ascending: true })
     .limit(limit);
+  const { data, error } = await (streamId ? query.eq("stream_id", streamId) : query);
 
   if (error) {
     throw new Error(`Failed to load candidates: ${error.message}`);

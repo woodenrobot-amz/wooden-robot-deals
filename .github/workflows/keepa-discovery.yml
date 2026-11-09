@@ -15,6 +15,7 @@ on:
         default: woodworking_core
         type: choice
         options:
+          - big_run
           - woodworking_core
           - woodworking_general
           - outdoor_power_tools
@@ -37,7 +38,10 @@ concurrency:
 jobs:
   discover:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 35
+    concurrency:
+      group: ${{ inputs.stream_name == 'big_run' && 'enrich-deal-candidates' || github.run_id }}
+      cancel-in-progress: false
 
     steps:
       - name: Select stream
@@ -68,6 +72,7 @@ jobs:
           echo "Selected stream: $stream"
 
       - name: Run discovery
+        if: steps.stream.outputs.name != 'big_run'
         env:
           APP_URL: ${{ secrets.APP_URL }}
           AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
@@ -100,3 +105,61 @@ jobs:
 
           echo
           echo "Keepa discovery completed for $STREAM_NAME."
+
+      - name: Run Big Run
+        if: steps.stream.outputs.name == 'big_run'
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          AUTOMATION_SECRET: ${{ secrets.AUTOMATION_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$APP_URL" || -z "$AUTOMATION_SECRET" ]]; then
+            echo "::error::Add APP_URL and AUTOMATION_SECRET as repository Actions secrets."
+            exit 1
+          fi
+
+          body="$(mktemp)"
+          trap 'rm -f "$body"' EXIT
+
+          post_with_keepa_retry() {
+            local endpoint="$1" payload="$2" attempt status
+            for attempt in 1 2 3; do
+              status="$(curl --silent --show-error --connect-timeout 15 --max-time 90 \
+                --output "$body" --write-out '%{http_code}' \
+                --header "Authorization: Bearer $AUTOMATION_SECRET" \
+                --header 'Content-Type: application/json' \
+                --data "$payload" "${APP_URL%/}/api/automation/$endpoint")"
+              if [[ "$status" == 200 ]]; then
+                return 0
+              fi
+
+              if (( attempt < 3 )) && { [[ "$status" == 429 ]] ||
+                jq -e '(.error // "") | test("^Keepa (discovery|request) failed: 429 ")' "$body" >/dev/null 2>&1; }; then
+                echo "Keepa throttled $endpoint. Waiting $((60 * attempt)) seconds."
+                sleep "$((60 * attempt))"
+                continue
+              fi
+
+              echo "::error::$endpoint failed with HTTP $status."
+              jq -r '.error // empty' "$body" || true
+              return 1
+            done
+          }
+
+          for preset in power_tools_main trusted_sellers dudes_power woodworking_test; do
+            echo "::group::$preset"
+            post_with_keepa_retry run-stream "$(jq -nc --arg preset "$preset" '{bigRunPreset: $preset}')"
+            jq -c '{stream, found, queued, preserved, tokensLeft}' "$body"
+
+            # Match the tuning PWA's per-stream limit within the app's 100-item batch cap.
+            for limit in 100 25; do
+              post_with_keepa_retry enrich-candidates "$(jq -nc --arg preset "$preset" --argjson limit "$limit" \
+                '{bigRunPreset: $preset, limit: $limit}')"
+              jq -c '{selected, enriched, ignored, failed, tokensLeft}' "$body"
+              if [[ "$(jq -er '.selected' "$body")" -lt "$limit" ]]; then
+                break
+              fi
+            done
+            echo "::endgroup::"
+          done

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { getBigRunPreset } from "@/lib/discovery/bigRun";
 import { enrichCandidateQueue } from "@/lib/pipeline/enrichCandidates";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const limit = body.limit == null ? undefined : Number(body.limit);
-    const result = await enrichCandidateQueue(limit);
+    const preset = getBigRunPreset(String(body.bigRunPreset ?? ""));
+    if (body.bigRunPreset != null && !preset) {
+      return NextResponse.json({ error: "Unknown Big Run preset" }, { status: 400 });
+    }
+    const result = await enrichCandidateQueue(limit, preset?.streamId);
 
     return NextResponse.json({
       ok: true,

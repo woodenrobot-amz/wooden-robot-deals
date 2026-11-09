@@ -49,7 +49,7 @@ function normalizeStreamIdentifier(value: unknown) {
     .replace(/[^a-z0-9]/g, "");
 }
 
-export async function runStream(streamName: string) {
+export async function runStream(streamName: string, selection?: Record<string, unknown>) {
   const supabase = createAdminClient();
 
   const { data: streams, error } = await supabase
@@ -83,7 +83,7 @@ export async function runStream(streamName: string) {
     throw new Error(`${streamName} is inactive.`);
   }
 
-  const discoveryResults = await runKeepaDiscovery(stream.config);
+  const discoveryResults = await runKeepaDiscovery(selection ?? stream.config ?? {});
 
   const asins: string[] = discoveryResults.asinList.map((asin: string) =>
     asin.trim().toUpperCase(),
