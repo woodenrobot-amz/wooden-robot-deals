@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { getBigRunPreset } from "@/lib/discovery/bigRun";
 import { runStream } from "@/lib/discovery/runStream";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,11 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const streamName = String(body.streamName || "").trim();
+    const preset = getBigRunPreset(String(body.bigRunPreset ?? ""));
+    if (body.bigRunPreset != null && !preset) {
+      return NextResponse.json({ error: "Unknown Big Run preset" }, { status: 400 });
+    }
+    const streamName = preset?.streamId ?? String(body.streamName || "").trim();
 
     if (!streamName) {
       return NextResponse.json(
@@ -38,7 +43,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await runStream(streamName);
+    const result = await runStream(streamName, preset?.selection);
 
     return NextResponse.json({
       ok: true,

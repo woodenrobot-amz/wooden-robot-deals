@@ -57,6 +57,11 @@ After deployment, run the workflow manually for one stream before relying on the
 
 The `Enrich Deal Candidates` workflow processes up to 50 queued records per hour. It batches Keepa product requests, hydrates current public data through Amazon Creators API, applies brand tiers and scoring, and stores the review payload in `deal_candidates.raw_data.enrichment` with status `enriched`. It does not publish deals automatically.
 
+### Big Run
+
+In GitHub Actions, open **Keepa Discovery**, choose **Run workflow**, and select `big_run`.
+It runs the tuning PWA's Main Power Tools, Trusted Sellers, Dudes Power, and Woodworking Test searches in order. Each search queues candidates in the corresponding app stream and enriches up to 125 pending candidates from that stream using the app's scoring and review pipeline. The workflow logs discovery and enrichment counts and the reported Keepa token balance. Review the results in **Admin → Candidate Review**.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
