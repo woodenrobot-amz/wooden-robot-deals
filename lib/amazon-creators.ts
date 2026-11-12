@@ -9,6 +9,11 @@ let cachedToken: CachedAmazonToken | null = null;
 
 const AMAZON_MAX_ATTEMPTS = 4;
 const AMAZON_RETRY_BASE_MS = 1_000;
+// Amazon caps a single getItems call at 10 item IDs. Callers in
+// lib/pipeline already batch to 10; chunking here too keeps the public
+// /api/amazon/get-items endpoint (and the admin proxy) within the limit
+// for arbitrarily long ASIN lists.
+const AMAZON_GET_ITEMS_BATCH_LIMIT = 10;
 
 function wait(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -103,43 +108,13 @@ export type AmazonPublicItem = {
   affiliateUrl: string;
 };
 
-export async function getAmazonItems(
-  asins: string[],
+async function fetchAmazonItemsBatch(
+  batch: string[],
+  accessToken: string,
+  partnerTag: string,
 ): Promise<AmazonPublicItem[]> {
-  const cleanAsins = [
-    ...new Set(asins.map((a) => a.trim().toUpperCase()).filter(Boolean)),
-  ];
-
-  if (cleanAsins.length === 0) {
-    return [];
-  }
-
-  // The public Deals project owns the Amazon credentials for the split deployment.
-  if (isAdminSurface && (!process.env.AMAZON_CREDENTIAL_ID || !process.env.AMAZON_SECRET)) {
-    const response = await fetch("https://wooden-robot-deals.vercel.app/api/amazon/get-items", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ asins: cleanAsins }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Deals app Amazon lookup failed: ${response.status}`);
-    }
-
-    const { items } = await response.json();
-    if (!Array.isArray(items)) {
-      throw new Error("Deals app Amazon lookup returned an invalid response");
-    }
-    return items;
-  }
-
-  const accessToken = await getAmazonAccessToken();
-  const partnerTag = requireEnv("AMAZON_PARTNER_TAG");
-
   const requestBody = JSON.stringify({
-    itemIds: cleanAsins,
+    itemIds: batch,
     itemIdType: "ASIN",
     marketplace: "www.amazon.com",
     partnerTag,
@@ -208,4 +183,65 @@ export async function getAmazonItems(
         `https://www.amazon.com/dp/${asin}?tag=${partnerTag}`,
     };
   });
+}
+
+export async function getAmazonItems(
+  asins: string[],
+): Promise<AmazonPublicItem[]> {
+  const cleanAsins = [
+    ...new Set(asins.map((a) => a.trim().toUpperCase()).filter(Boolean)),
+  ];
+
+  if (cleanAsins.length === 0) {
+    return [];
+  }
+
+  // The public Deals project owns the Amazon credentials for the split deployment.
+  // The proxy URL and the Bearer secret it requires are configured per
+  // deployment; see the "Public and admin PWA projects" section in README.md.
+  // AMAZON_GET_ITEMS_PROXY_URL must be the full get-items endpoint URL on the
+  // public project, and AUTOMATION_SECRET must match the value set there.
+  if (isAdminSurface && (!process.env.AMAZON_CREDENTIAL_ID || !process.env.AMAZON_SECRET)) {
+    const proxyUrl = requireEnv("AMAZON_GET_ITEMS_PROXY_URL");
+    const automationSecret = requireEnv("AUTOMATION_SECRET");
+    const items: AmazonPublicItem[] = [];
+
+    for (let index = 0; index < cleanAsins.length; index += AMAZON_GET_ITEMS_BATCH_LIMIT) {
+      const batch = cleanAsins.slice(index, index + AMAZON_GET_ITEMS_BATCH_LIMIT);
+      const response = await fetch(proxyUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${automationSecret}`,
+        },
+        body: JSON.stringify({ asins: batch }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Deals app Amazon lookup failed: ${response.status}`);
+      }
+
+      const { items: batchItems } = await response.json();
+      if (!Array.isArray(batchItems)) {
+        throw new Error("Deals app Amazon lookup returned an invalid response");
+      }
+      items.push(...batchItems);
+    }
+
+    return items;
+  }
+
+  const accessToken = await getAmazonAccessToken();
+  const partnerTag = requireEnv("AMAZON_PARTNER_TAG");
+
+  const items: AmazonPublicItem[] = [];
+
+  for (let index = 0; index < cleanAsins.length; index += AMAZON_GET_ITEMS_BATCH_LIMIT) {
+    const batch = cleanAsins.slice(index, index + AMAZON_GET_ITEMS_BATCH_LIMIT);
+    items.push(...(await fetchAmazonItemsBatch(batch, accessToken, partnerTag)));
+  }
+
+  return items;
 }
