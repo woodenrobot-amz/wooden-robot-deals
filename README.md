@@ -92,7 +92,14 @@ public Deals experience and the authenticated Posting Desk as distinct PWAs:
    scope.
 3. Configure Supabase and the required server-side secrets on both projects.
    Posting Desk uses the public Deals project's live Amazon lookup when it has
-   no Amazon credential pair of its own. Add each project's callback URL to the Supabase authentication
+   no Amazon credential pair of its own. That lookup is the authenticated
+   `POST /api/amazon/get-items` endpoint on the public project, so the admin
+   project needs `AMAZON_GET_ITEMS_PROXY_URL` set to the full endpoint URL
+   (for example `https://wooden-robot-deals.vercel.app/api/amazon/get-items`)
+   and `AUTOMATION_SECRET` set to the same value configured on the public
+   project, which the endpoint requires as a Bearer token. Without both
+   values, Posting Desk Amazon enrichment falls back to saved deal data.
+   Add each project's callback URL to the Supabase authentication
    redirect allow list; for the admin project that is
    `https://<admin-domain>/auth/callback`.
 
