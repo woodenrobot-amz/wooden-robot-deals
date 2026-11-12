@@ -323,7 +323,10 @@ export async function PUT(request: Request) {
         schedule_item_id: item.id,
         posting_group_id: postingGroupId,
         schedule_date: scheduleDate,
-        schedule_hour: scheduleHour!,
+        // Sequential groups have no schedule hour (the route rejects one for
+        // them above), so record an explicit null; deal_post_events
+        // .schedule_hour is nullable. Hourly groups keep their hour exactly.
+        schedule_hour: isHourly ? scheduleHour! : null,
         asin: firstComment.asin,
         parent_asin: firstSnapshot?.parentAsin || null,
         product_title: firstSnapshot?.title || null,
