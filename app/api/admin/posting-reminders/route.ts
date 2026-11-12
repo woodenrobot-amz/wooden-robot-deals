@@ -1,3 +1,4 @@
+import { DEFAULT_REMINDER_TIMES, normalizeReminderTimes } from "@/lib/posting-reminder";
 import { isPushEndpoint, pushConfig } from "@/lib/posting-push";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -7,17 +8,23 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { data, error } = await supabase
-    .from("deal_schedule_items")
-    .select("posted_at")
-    .eq("user_id", user.id)
-    .eq("status", "posted")
-    .not("posted_at", "is", null)
-    .order("posted_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) return Response.json({ error: "Could not load the reminder timer." }, { status: 500 });
-  return Response.json({ postedAt: data?.posted_at ?? null, publicKey: pushConfig()?.publicKey ?? null });
+  const { data, error } = await supabase.from("posting_reminder_settings")
+    .select("times").eq("user_id", user.id).maybeSingle();
+  if (error) return Response.json({ error: "Could not load the reminder schedule." }, { status: 500 });
+  return Response.json({ times: data?.times ?? DEFAULT_REMINDER_TIMES, publicKey: pushConfig()?.publicKey ?? null });
+}
+
+export async function PATCH(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const body = await request.json().catch(() => null);
+  const times = normalizeReminderTimes(body?.times);
+  if (!times) return Response.json({ error: "Use up to 48 valid times in HH:MM format." }, { status: 400 });
+  const { error } = await supabase.from("posting_reminder_settings")
+    .upsert({ user_id: user.id, times, updated_at: new Date().toISOString() });
+  if (error) return Response.json({ error: "Could not save the reminder schedule." }, { status: 500 });
+  return Response.json({ times });
 }
 
 export async function PUT(request: Request) {

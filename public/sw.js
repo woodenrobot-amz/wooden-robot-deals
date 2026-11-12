@@ -76,7 +76,7 @@ self.addEventListener("push", (event) => {
   if (!data?.expiresAt || Date.now() >= Date.parse(data.expiresAt)) return;
 
   event.waitUntil(self.registration.showNotification("Posting Desk", {
-    body: "It’s been an hour since your last deal post.",
+    body: "Time to post a deal. Your scheduled Posting Desk reminder.",
     icon: "/icons/admin-icon-192.png",
     tag: "posting-desk-reminder",
   }));
