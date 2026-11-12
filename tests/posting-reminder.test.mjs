@@ -1,7 +1,7 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const ts = require('typescript');
-const fs = require('node:fs');
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+import fs from 'node:fs';
 const source = ts.transpileModule(fs.readFileSync('lib/posting-reminder.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText;

@@ -33,7 +33,7 @@ jobs:
         run: npm run lint
 
       - name: Reminder schedule tests
-        run: node --test tests/posting-reminder.test.cjs
+        run: node --test tests/posting-reminder.test.mjs
 
       - name: Build
         env:
