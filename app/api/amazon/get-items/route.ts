@@ -1,9 +1,34 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getAmazonItems } from "@/lib/amazon-creators";
 
 export const runtime = "nodejs";
 
+// Same timing-safe Bearer secret pattern as the automation routes
+// (app/api/automation/*): AUTOMATION_SECRET, compared with timingSafeEqual.
+// The admin deployment sends this secret when it proxies Amazon lookups here.
+function isAuthorized(request: Request) {
+  const expectedSecret = process.env.AUTOMATION_SECRET;
+  const authorization = request.headers.get("authorization");
+
+  if (!expectedSecret || !authorization?.startsWith("Bearer ")) {
+    return false;
+  }
+
+  const providedSecret = authorization.slice("Bearer ".length);
+  const expected = Buffer.from(expectedSecret);
+  const provided = Buffer.from(providedSecret);
+
+  return (
+    expected.length === provided.length && timingSafeEqual(expected, provided)
+  );
+}
+
 export async function POST(req: NextRequest) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const asins = body?.asins;
