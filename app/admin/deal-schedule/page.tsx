@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { dateInEasternTime, type PostingGroup, type ScheduleItem } from "@/lib/deal-schedule";
+import { dateInEasternTime, groupsForScheduleDate, type PostingGroup, type ScheduleItem } from "@/lib/deal-schedule";
 import { DealScheduleBoard } from "./deal-schedule-board";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +53,7 @@ export default async function DealSchedulePage({
       <div className="mx-auto max-w-7xl">
         <DealScheduleBoard
           initialDate={selectedDate}
-          initialGroups={(groups || []) as PostingGroup[]}
+          initialGroups={groupsForScheduleDate((groups || []) as PostingGroup[], selectedDate)}
           initialItems={(items || []) as ScheduleItem[]}
         />
       </div>

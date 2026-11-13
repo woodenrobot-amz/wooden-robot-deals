@@ -23,6 +23,7 @@ export type PostingGroup = {
   sort_order: number;
   schedule_type: "hourly" | "sequential";
   tracks_post_events: boolean;
+  numbered_queue?: boolean;
 };
 
 export type ScheduleStatus = "planned" | "posted";
@@ -76,7 +77,31 @@ export function formatScheduleHour(hour: number) {
   return hour > 12 ? `${hour - 12} PM` : `${hour} AM`;
 }
 
-export function recurringDailySlot(groupSlug: string, hour: number) {
+// Keep persisted slot keys stable so preplanned deals and historical schedules survive.
+export const NUMBERED_QUEUES_START_DATE = "2026-11-14";
+
+export function groupsForScheduleDate(groups: PostingGroup[], date: string): PostingGroup[] {
+  return groups.map((group) => ({
+    ...group,
+    numbered_queue: date >= NUMBERED_QUEUES_START_DATE && group.schedule_type === "hourly",
+  }));
+}
+
+export function scheduleSlotLabel(group: PostingGroup, position: number) {
+  if (group.numbered_queue) return `Deal #${position - SCHEDULE_START_HOUR + 1}`;
+  return group.schedule_type === "hourly" ? formatScheduleHour(position) : `Deal #${position}`;
+}
+
+export function recurringDailySlot(groupSlug: string, hour: number, numberedQueue = false) {
+  if (numberedQueue) {
+    return groupSlug === "woodworking" && hour === SCHEDULE_START_HOUR + 7
+      ? {
+          label: "Daily deal roundup",
+          postBody: "",
+          commentText: "Your Daily Deal Roundup!\nAmazon List - https://amzlink.to/az0PcMReHRer7\nLowes' Daily Deals - https://shoplowes.me/45yEA4t",
+        }
+      : null;
+  }
   const slot = RECURRING_DAILY_SLOTS.woodworkingLightningDeal;
   return groupSlug === slot.groupSlug && hour === slot.hour ? slot : null;
 }

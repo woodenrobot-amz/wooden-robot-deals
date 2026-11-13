@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { PostingReminder } from "./posting-reminder";
 import {
   dateInEasternTime,
-  formatScheduleHour,
+  scheduleSlotLabel,
   recurringDailySlot,
   SCHEDULE_HOURS,
   type PostingGroup,
@@ -69,7 +69,7 @@ function sequenceCountsFor(items: ScheduleItem[], groups: PostingGroup[]) {
 }
 
 function slotLabel(group: PostingGroup, position: number) {
-  return group.schedule_type === "hourly" ? formatScheduleHour(position) : `Deal ${position}`;
+  return scheduleSlotLabel(group, position);
 }
 
 function normalizedComments(item?: ScheduleItem): DraftComment[] {
@@ -92,7 +92,7 @@ function draftFromItem(item?: ScheduleItem, group?: PostingGroup, position?: num
   if (!item) {
     const recurring =
       group?.schedule_type === "hourly" && position !== undefined
-        ? recurringDailySlot(group.slug, position)
+        ? recurringDailySlot(group.slug, position, group.numbered_queue)
         : null;
     return recurring
       ? {
@@ -528,7 +528,7 @@ export function DealScheduleBoard({
                 const posted = draft.status === "posted";
                 const recurring =
                   activeGroup.schedule_type === "hourly"
-                    ? recurringDailySlot(activeGroup.slug, position)
+                    ? recurringDailySlot(activeGroup.slug, position, activeGroup.numbered_queue)
                     : null;
                 const collapsed = mode === "copy" && posted && !expandedPostedKeys.has(key);
                 const label = slotLabel(activeGroup, position);
@@ -617,7 +617,7 @@ export function DealScheduleBoard({
                     </div>
 
                     <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-800 pt-4 xl:pl-[8rem]">
-                      <button type="button" onClick={() => saveSlot(activeGroup.id, position)} disabled={busyKey === key || !dirty} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-extrabold text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-600">{busyKey === key ? "Saving…" : dirty ? activeGroup.schedule_type === "hourly" ? "Save slot" : "Save deal" : "Saved"}</button>
+                      <button type="button" onClick={() => saveSlot(activeGroup.id, position)} disabled={busyKey === key || !dirty} className="min-h-11 rounded-xl bg-amber-300 px-5 text-sm font-extrabold text-zinc-950 disabled:bg-zinc-800 disabled:text-zinc-600">{busyKey === key ? "Saving…" : dirty ? activeGroup.schedule_type === "hourly" && !activeGroup.numbered_queue ? "Save slot" : "Save deal" : "Saved"}</button>
                       <button type="button" onClick={() => handleCopy(draft.postBody, `${key}:post`)} disabled={!draft.postBody} className="min-h-11 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200 disabled:text-zinc-600">{copiedKey === `${key}:post` ? "Post copied ✓" : "Copy post"}</button>
                       {draft.comments.map((comment, index) => (
                         <button key={index} type="button" onClick={() => handleCopy(comment.commentText, `${key}:comment:${index}`)} disabled={!comment.commentText} className="min-h-11 rounded-xl bg-zinc-800 px-4 text-sm font-bold text-zinc-200 disabled:text-zinc-600">{copiedKey === `${key}:comment:${index}` ? `Comment ${index + 1} copied ✓` : draft.comments.length > 1 ? `Copy comment ${index + 1}` : "Copy comment"}</button>
