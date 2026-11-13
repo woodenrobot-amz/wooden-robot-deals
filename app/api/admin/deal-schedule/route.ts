@@ -5,6 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   isScheduleDate,
+  groupsForScheduleDate,
+  NUMBERED_QUEUES_START_DATE,
   recurringDailySlot,
   SCHEDULE_END_HOUR,
   SCHEDULE_START_HOUR,
@@ -134,7 +136,7 @@ export async function GET(request: Request) {
     deal_schedule_comments: [...(item.deal_schedule_comments || [])].sort((a, b) => a.position - b.position),
   }));
 
-  return NextResponse.json({ groups: groupsResult.data || [], items });
+  return NextResponse.json({ groups: groupsForScheduleDate(groupsResult.data || [], date), items });
 }
 
 export async function POST(request: Request) {
@@ -250,7 +252,7 @@ export async function PUT(request: Request) {
 
   if (existingResult.error) return NextResponse.json({ error: existingResult.error.message }, { status: 500 });
 
-  const isRecurringSlot = isHourly && Boolean(recurringDailySlot(groupResult.data.slug, scheduleHour!));
+  const isRecurringSlot = isHourly && Boolean(recurringDailySlot(groupResult.data.slug, scheduleHour!, scheduleDate >= NUMBERED_QUEUES_START_DATE));
   const hasComments = comments.some((comment) => comment.commentText || comment.asin);
 
   if (!postBody && !hasComments && status === "planned" && !isRecurringSlot) {
